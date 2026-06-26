@@ -1,0 +1,423 @@
+.dockerignore
+  s_d9dc368c15fbbd::t_76d1b9baf3581a 1-34
+.env.example
+  s_d9dc368c15fbbd::t_4d5022c1b28b52 1-78
+.gitattributes
+  s_d9dc368c15fbbd::t_698b13757468e5 1-21
+.github/ISSUE_TEMPLATE/bug_report.md
+  s_d9dc368c15fbbd::t_8a464d2e6a9099 1-32
+.github/ISSUE_TEMPLATE/feature_request.md
+  s_d9dc368c15fbbd::t_9abf9ae6e8dc4c 1-19
+.github/pull_request_template.md
+  s_d9dc368c15fbbd::t_8e8926ca97ec4b 1-21
+.gitignore
+  s_d9dc368c15fbbd::t_f70451dc6f8549 1-58
+CLA.md
+  s_d9dc368c15fbbd::t_c41e0de51ad995 1-76
+CONTRIBUTING.md
+  s_d9dc368c15fbbd::t_bd4594d61fd1d3 1-58
+Dockerfile
+  s_d9dc368c15fbbd::t_4fbba5975eb279 1-56
+LICENSE
+  s_d9dc368c15fbbd::t_e7268cc817013f 1-661
+LICENSE.COMMERCIAL
+  s_d9dc368c15fbbd::t_5c09d547f74622 1-72
+README.md
+  s_d9dc368c15fbbd::t_e8adbb50eda212 1-381
+data/obfuscation_key.json
+  s_d9dc368c15fbbd::t_b667bac2811b2c 1
+data/seed_novels/仙门试炼.json
+  s_d9dc368c15fbbd::t_61ae0d4cef967e 1-7
+data/seed_novels/天下粮仓.json
+  s_d9dc368c15fbbd::t_473665eb60aa97 1-7
+data/seed_novels/序列崩塌.json
+  s_d9dc368c15fbbd::t_b6d6a6d43edb4c 1-7
+data/seed_novels/暗线.json
+  s_d9dc368c15fbbd::t_8f89b4e5c25e60 1-7
+data/seed_novels/流金岁月.json
+  s_d9dc368c15fbbd::t_4064e4e0e36a45 1-7
+data/seed_novels/灼骨.json
+  s_d9dc368c15fbbd::t_18390ce69ec4e2 1-7
+data/seed_novels/王牌供应商.json
+  s_d9dc368c15fbbd::t_21eedeef4ef3e1 1-7
+data/seed_novels/第七夜.json
+  s_d9dc368c15fbbd::t_9b9a9d1d82afac 1-7
+data/seed_novels/锦绣归.json
+  s_d9dc368c15fbbd::t_8d61dbddc3fc6a 1-7
+data/seed_novels/零点之后.json
+  s_d9dc368c15fbbd::t_2e94ee882e75fe 1-7
+data/seed_novels/顶峰.json
+  s_d9dc368c15fbbd::t_80002f7d4b8985 1-7
+docker-compose.yml
+  s_d9dc368c15fbbd::t_e4c49de250f5c4 1-34
+docs/images/ag1-landscape/ag1-L2-scene-design-v1.png
+  s_d9dc368c15fbbd::t_73f90a4d9e7e76 1-3
+docs/images/ag1-landscape/ag1-L3-kf-A-open-v1.png
+  s_d9dc368c15fbbd::t_f66f1ddfd1a345 1-3
+docs/images/ag1-landscape/ag1-L3-kf-B-river-v1.png
+  s_d9dc368c15fbbd::t_fb7170f05639a6 1-3
+docs/images/ai-cognition-pyramid.png
+  s_d9dc368c15fbbd::t_655239e30b80d7 1-3
+docs/images/ai-tool-vs-ai-product.png
+  s_d9dc368c15fbbd::t_dee0e832306477 1-3
+docs/images/logos/logo-主标识.png
+  s_d9dc368c15fbbd::t_40dd1d63670f04 1-3
+docs/images/logos/logo-单色墨.png
+  s_d9dc368c15fbbd::t_ff762656aec2c7 1-3
+docs/images/logos/logo-图标版.png
+  s_d9dc368c15fbbd::t_f3361f7091549b 1-3
+docs/images/logos/logo-深色背景.png
+  s_d9dc368c15fbbd::t_74901705a15d2d 1-3
+docs/images/logos/logo-竖排.png
+  s_d9dc368c15fbbd::t_3cf68a12677b12 1-3
+docs/images/logos/萦回logo.png
+  s_d9dc368c15fbbd::t_2b80f5adfaf10a 1-3
+docs/images/style-spine/L1-style-ref-v1.png
+  s_d9dc368c15fbbd::t_7e283de3696d27 1-3
+docs/images/system-architecture.drawio
+  s_d9dc368c15fbbd::t_bbbfaabfdd179a 1-3
+docs/images/system-architecture.png
+  s_d9dc368c15fbbd::t_0cdde139705950 1-3
+docs/images/token-cost-measured.png
+  s_d9dc368c15fbbd::t_c6dae730f03a23 1-3
+docs/videos/demoA-1.mp4
+  s_d9dc368c15fbbd::t_61fbfba10b47fa 1-3
+docs/videos/demoA-2.mp4
+  s_d9dc368c15fbbd::t_b663ead9459778 1-3
+docs/videos/demoA-3.mp4
+  s_d9dc368c15fbbd::t_3a1ffac726bb71 1-3
+docs/videos/demoA-4.mp4
+  s_d9dc368c15fbbd::t_b61715833dbc89 1-3
+docs/videos/demoA-5.mp4
+  s_d9dc368c15fbbd::t_b4a74957613e6c 1-3
+docs/videos/demoA-6.mp4
+  s_d9dc368c15fbbd::t_3ce4715e57b1b8 1-3
+docs/videos/demoC-1.mp4
+  s_d9dc368c15fbbd::t_9abeec7bc9a788 1-3
+docs/videos/demoC-2.mp4
+  s_d9dc368c15fbbd::t_d4c7dc0ac24783 1-3
+docs/videos/demoC-3.mp4
+  s_d9dc368c15fbbd::t_b7b2437eb05deb 1-3
+docs/videos/demoC-4.mp4
+  s_d9dc368c15fbbd::t_0b0d6e99ad028a 1-3
+docs/videos/demoC-5.mp4
+  s_d9dc368c15fbbd::t_3de7ab29ef1cbd 1-3
+frontend/Dockerfile
+  s_d9dc368c15fbbd::t_491b1bc621e626 1-29
+frontend/index.html
+  s_d9dc368c15fbbd::t_a125111ab00094 1-16
+frontend/nginx.conf
+  s_d9dc368c15fbbd::t_88fab428e03040 1-44
+frontend/package-lock.json
+  s_d9dc368c15fbbd::t_b3c535c3b3ea6a 1-4771
+frontend/package.json
+  s_d9dc368c15fbbd::t_d24fd36dcc2529 1-34
+frontend/postcss.config.js
+  s_d9dc368c15fbbd::t_ca05ae37c8bc96 1-9
+frontend/public/assets/fonts/novel-obfuscated.woff2
+  s_d9dc368c15fbbd::t_7ad87d54d3d8ea 1-3
+frontend/public/assets/images/logo-icon.png
+  s_d9dc368c15fbbd::t_546a70674235ca 1-3
+frontend/public/assets/images/logo.png
+  s_d9dc368c15fbbd::t_040c23ed79b473 1-3
+frontend/public/logo-icon.png
+  s_d9dc368c15fbbd::t_4ae729fdeee8d9 1-3
+frontend/public/logo.png
+  s_d9dc368c15fbbd::t_7d4f97a6450258 1-3
+frontend/src/App.vue
+  s_d9dc368c15fbbd::t_8725aac7463855 1-25
+frontend/src/api/client.ts
+  s_d9dc368c15fbbd::t_fc2136fa809ad2 1-253
+frontend/src/components/chat/CharacterCard.vue
+  s_d9dc368c15fbbd::t_6395f0155365f4 1-39
+frontend/src/components/chat/CharacterHeader.vue
+  s_d9dc368c15fbbd::t_ad8ade5b915be0 1-24
+frontend/src/components/chat/ChatBubble.vue
+  s_d9dc368c15fbbd::t_4ac863b59d2a1a 1-70
+frontend/src/components/chat/ChatHistory.vue
+  s_d9dc368c15fbbd::t_ec2bb877b977c1 1-138
+frontend/src/components/chat/ChatInput.vue
+  s_d9dc368c15fbbd::t_6f5668103e6a45 1-58
+frontend/src/components/chat/ChatWindow.vue
+  s_d9dc368c15fbbd::t_4271f5c92d3a81 1-226
+frontend/src/components/chat/__tests__/ChatBubble.test.ts
+  s_d9dc368c15fbbd::t_52e6b5d0128918 1-64
+frontend/src/components/chat/__tests__/ChatWindow.test.ts
+  s_d9dc368c15fbbd::t_afeec4bf4ea154 1-59
+frontend/src/components/evolution/BranchCard.vue
+  s_d9dc368c15fbbd::t_69d96f91547991 1-40
+frontend/src/components/evolution/BranchDrawer.vue
+  s_d9dc368c15fbbd::t_6c7b8a8b921e41 1-85
+frontend/src/components/evolution/CharacterPanel.vue
+  s_d9dc368c15fbbd::t_475e3d5b6fe32e 1-96
+frontend/src/components/evolution/CustomEventInput.vue
+  s_d9dc368c15fbbd::t_00e0f0a7855df2 1-41
+frontend/src/components/evolution/EvolutionControl.vue
+  s_d9dc368c15fbbd::t_e72c834e449fec 1-180
+frontend/src/components/evolution/NovelDrawer.vue
+  s_d9dc368c15fbbd::t_e675ae5782d66c 1-63
+frontend/src/components/evolution/RoundCounter.vue
+  s_d9dc368c15fbbd::t_93c563943c7a4c 1-21
+frontend/src/components/evolution/Timeline.vue
+  s_d9dc368c15fbbd::t_4c39691ef1f5e9 1-94
+frontend/src/components/evolution/TimelineEvent.vue
+  s_d9dc368c15fbbd::t_020e147112be97 1-198
+frontend/src/components/evolution/__tests__/BranchDrawer.test.ts
+  s_d9dc368c15fbbd::t_9feb6f3dde718f 1-66
+frontend/src/components/evolution/__tests__/EvolutionControl.test.ts
+  s_d9dc368c15fbbd::t_43b1666f1b234a 1-124
+frontend/src/components/evolution/__tests__/Timeline.test.ts
+  s_d9dc368c15fbbd::t_22d33e87d2964a 1-32
+frontend/src/components/evolution/__tests__/TimelineEvent.test.ts
+  s_d9dc368c15fbbd::t_c982127a9a706a 1-115
+frontend/src/components/memory/MemoryItem.vue
+  s_d9dc368c15fbbd::t_948c46c4dd0c5a 1-82
+frontend/src/components/memory/MemoryPanel.vue
+  s_d9dc368c15fbbd::t_d0d377057371ec 1-107
+frontend/src/components/memory/__tests__/MemoryPanel.test.ts
+  s_d9dc368c15fbbd::t_5564f589fe2539 1-101
+frontend/src/components/navigation/BrandBar.vue
+  s_d9dc368c15fbbd::t_580d5a09e02ed1 1-15
+frontend/src/components/navigation/TopNav.vue
+  s_d9dc368c15fbbd::t_db9abfe3e5af3c 1-133
+frontend/src/components/navigation/__tests__/TopNav.test.ts
+  s_d9dc368c15fbbd::t_66d3f755cd0904 1-95
+frontend/src/components/ui/BaseButton.vue
+  s_d9dc368c15fbbd::t_e90354ae62b31c 1-38
+frontend/src/components/ui/ConfirmDialog.vue
+  s_d9dc368c15fbbd::t_72ca03e708b0b0 1-52
+frontend/src/components/ui/__tests__/BaseButton.test.ts
+  s_d9dc368c15fbbd::t_a7b7ae3115a8b6 1-37
+frontend/src/components/ui/__tests__/ConfirmDialog.test.ts
+  s_d9dc368c15fbbd::t_84ce429f2d4936 1-40
+frontend/src/components/world/RelationshipGraph.vue
+  s_d9dc368c15fbbd::t_aaee8c28445a20 1-59
+frontend/src/components/world/WorldCard.vue
+  s_d9dc368c15fbbd::t_f149d004c0fd98 1-81
+frontend/src/components/world/WorldPanel.vue
+  s_d9dc368c15fbbd::t_502841ba725fb5 1-78
+frontend/src/composables/__tests__/useSSE.test.ts
+  s_d9dc368c15fbbd::t_e26e726efdcbd8 1-21
+frontend/src/composables/useSSE.ts
+  s_d9dc368c15fbbd::t_46c78857f0a10f 1-112
+frontend/src/config.ts
+  s_d9dc368c15fbbd::t_a3c2ab4261ca88 1-9
+frontend/src/env.d.ts
+  s_d9dc368c15fbbd::t_daba108aef2d2e 1-21
+frontend/src/main.ts
+  s_d9dc368c15fbbd::t_f59e97249f846c 1-13
+frontend/src/pages/ChatPage.vue
+  s_d9dc368c15fbbd::t_ac7ce49967bbb5 1-368
+frontend/src/pages/ChatSelectPage.vue
+  s_d9dc368c15fbbd::t_50c4ffd37cd3ad 1-87
+frontend/src/pages/CreateWorldPage.vue
+  s_d9dc368c15fbbd::t_f2745022f6b242 1-369
+frontend/src/pages/EvolutionListPage.vue
+  s_d9dc368c15fbbd::t_df2d008fd9567f 1-155
+frontend/src/pages/EvolutionPage.vue
+  s_d9dc368c15fbbd::t_0f03935c7f4042 1-255
+frontend/src/pages/LoginPage.vue
+  s_d9dc368c15fbbd::t_6aac0607bcdd06 1-441
+frontend/src/pages/MemoryPage.vue
+  s_d9dc368c15fbbd::t_bbed2dd70f6774 1-223
+frontend/src/pages/NovelDetailPage.vue
+  s_d9dc368c15fbbd::t_bb6118b1103325 1-181
+frontend/src/pages/NovelListPage.vue
+  s_d9dc368c15fbbd::t_3de9c76b796db6 1-165
+frontend/src/pages/SettingsPage.vue
+  s_d9dc368c15fbbd::t_cd59a1a239494d 1-161
+frontend/src/pages/WorldDetailPage.vue
+  s_d9dc368c15fbbd::t_391d8bee306424 1-366
+frontend/src/pages/WorldListPage.vue
+  s_d9dc368c15fbbd::t_5d36df5db73bfb 1-122
+frontend/src/pages/__tests__/ChatPage.test.ts
+  s_d9dc368c15fbbd::t_8fa9a9118680ee 1-177
+frontend/src/pages/__tests__/ChatSelectPage.test.ts
+  s_d9dc368c15fbbd::t_1a44eaa62bc6e7 1-50
+frontend/src/pages/__tests__/MemoryPage.test.ts
+  s_d9dc368c15fbbd::t_448b8d1e06c750 1-84
+frontend/src/pages/__tests__/SettingsPage.test.ts
+  s_d9dc368c15fbbd::t_14af0fe4dc84a3 1-59
+frontend/src/router/index.ts
+  s_d9dc368c15fbbd::t_d2f7932416af55 1-75
+frontend/src/stores/chat.ts
+  s_d9dc368c15fbbd::t_c23e236510b526 1-272
+frontend/src/stores/evolution.ts
+  s_d9dc368c15fbbd::t_4e9fdf16b9d280 1-181
+frontend/src/stores/novel.ts
+  s_d9dc368c15fbbd::t_059120b759760d 1-103
+frontend/src/stores/user.ts
+  s_d9dc368c15fbbd::t_42649dba924702 1-30
+frontend/src/stores/world.ts
+  s_d9dc368c15fbbd::t_2657c6c97b3f5a 1-51
+frontend/src/style.css
+  s_d9dc368c15fbbd::t_dfbb1e4813ed5d 1-127
+frontend/src/types/index.ts
+  s_d9dc368c15fbbd::t_e3456586ad31b4 1-255
+frontend/tailwind.config.ts
+  s_d9dc368c15fbbd::t_24554b103ccda7 1-50
+frontend/tsconfig.json
+  s_d9dc368c15fbbd::t_2892ba73696fca 1-19
+frontend/tsconfig.node.json
+  s_d9dc368c15fbbd::t_2f8ef7dd88685d 1-10
+frontend/vite.config.ts
+  s_d9dc368c15fbbd::t_75260ea314d17e 1-20
+frontend/vitest.config.ts
+  s_d9dc368c15fbbd::t_39946de66283e2 1-18
+pyproject.toml
+  s_d9dc368c15fbbd::t_46f660475f33c9 1-29
+requirements.txt
+  s_d9dc368c15fbbd::t_2be45c338ec53b 1-10
+scripts/generate_obfuscated_font.py
+  s_d9dc368c15fbbd::t_f23edcccfab49b 1-167
+server/ai/chat_agent/__init__.py
+  s_d9dc368c15fbbd::t_bcbfb5b4643166 1-7
+server/ai/chat_agent/agent.py
+  s_d9dc368c15fbbd::t_534f29047b5282 1-415
+server/ai/chat_agent/prompts/system_prompt.md
+  s_d9dc368c15fbbd::t_08eabd1af400fa 1-191
+server/ai/chat_agent/tools.py
+  s_d9dc368c15fbbd::t_629cc7666c6d23 1-182
+server/ai/common/deepseek_v3_tokenizer/deepseek_tokenizer.py
+  s_d9dc368c15fbbd::t_db23276db3f6aa 1-15
+server/ai/common/deepseek_v3_tokenizer/tokenizer.json
+  s_d9dc368c15fbbd::t_7d3a99fd92b269 1-3
+server/ai/common/deepseek_v3_tokenizer/tokenizer_config.json
+  s_d9dc368c15fbbd::t_8f38899e324cba 1-35
+server/ai/common/llm_client.py
+  s_d9dc368c15fbbd::t_29748ab433a0e6 1-179
+server/ai/completer_llm/__init__.py
+  s_d9dc368c15fbbd::t_6365fd7fa50746 1-4
+server/ai/completer_llm/completer.py
+  s_d9dc368c15fbbd::t_64ebd80258c0c7 1-152
+server/ai/completer_llm/prompts/completer_system.md
+  s_d9dc368c15fbbd::t_535acbef3c28c2 1-93
+server/ai/evolution_agent/__init__.py
+  s_d9dc368c15fbbd::t_85bacb374dc304 1-7
+server/ai/evolution_agent/agent.py
+  s_d9dc368c15fbbd::t_5709ed1a6a5ba8 1-677
+server/ai/evolution_agent/character_tools.py
+  s_d9dc368c15fbbd::t_ad2324af6584c7 1-64
+server/ai/evolution_agent/director_tools.py
+  s_d9dc368c15fbbd::t_4ee770ab877339 1-630
+server/ai/evolution_agent/prompts/character_system.md
+  s_d9dc368c15fbbd::t_204cb7ffb003fa 1-188
+server/ai/evolution_agent/prompts/director_system.md
+  s_d9dc368c15fbbd::t_7a25f433104c32 1-209
+server/ai/extract_llm/__init__.py
+  s_d9dc368c15fbbd::t_234637d0bb5042 1-4
+server/ai/extract_llm/extract.py
+  s_d9dc368c15fbbd::t_c724a1d43b39ab 1-189
+server/ai/extract_llm/prompts/extract_system.md
+  s_d9dc368c15fbbd::t_3a95d7469e8bf2 1-74
+server/ai/novel_agent/__init__.py
+  s_d9dc368c15fbbd::t_cd2fde42194f07 1-7
+server/ai/novel_agent/agent.py
+  s_d9dc368c15fbbd::t_79d6287e9329f5 1-509
+server/ai/novel_agent/prompts/agent_system.md
+  s_d9dc368c15fbbd::t_22b6da33026bd2 1-464
+server/ai/novel_agent/prompts/first_user_message.md
+  s_d9dc368c15fbbd::t_ac3f42d60bf2d8 1-49
+server/ai/novel_agent/prompts/reviewer_system.md
+  s_d9dc368c15fbbd::t_2fb994eb4de7b9 1-189
+server/ai/novel_agent/tools.py
+  s_d9dc368c15fbbd::t_ae9b6978f5abc7 1-326
+server/config.py
+  s_d9dc368c15fbbd::t_35ca4cb7124890 1-125
+server/dependencies.py
+  s_d9dc368c15fbbd::t_f64bada22e7bdd 1-82
+server/logging_config.py
+  s_d9dc368c15fbbd::t_1dbac9aa3133fd 1-46
+server/main.py
+  s_d9dc368c15fbbd::t_0f3de8ab332aee 1-53
+server/models/__init__.py
+  s_d9dc368c15fbbd::t_446ac6b85c5f84 1-22
+server/models/schemas.py
+  s_d9dc368c15fbbd::t_3fefe8c23c4834 1-287
+server/models/session.py
+  s_d9dc368c15fbbd::t_3afcaad1ce2833 1-39
+server/models/timeline.py
+  s_d9dc368c15fbbd::t_f40c61dc814e86 1-36
+server/models/world.py
+  s_d9dc368c15fbbd::t_f5f23b5ae0f391 1-47
+server/prompt_loader.py
+  s_d9dc368c15fbbd::t_1a6e98960e9998 1-54
+server/routers/__init__.py
+  s_d9dc368c15fbbd::t_f388b8864c8b78 1-4
+server/routers/auth.py
+  s_d9dc368c15fbbd::t_057ff7276939d3 1-26
+server/routers/chats.py
+  s_d9dc368c15fbbd::t_059b2986b72c13 1-164
+server/routers/evolutions.py
+  s_d9dc368c15fbbd::t_bc812763f8a069 1-264
+server/routers/memories.py
+  s_d9dc368c15fbbd::t_a2edf87a1159ea 1-64
+server/routers/novels.py
+  s_d9dc368c15fbbd::t_90c9b171ac2310 1-287
+server/routers/settings.py
+  s_d9dc368c15fbbd::t_cbfc444630bd1b 1-39
+server/routers/worlds.py
+  s_d9dc368c15fbbd::t_f37d61cf20bd84 1-110
+server/seed_presets.py
+  s_d9dc368c15fbbd::t_1346307ee5cb27 1-836
+server/services/care_service.py
+  s_d9dc368c15fbbd::t_f35ba519924e17 1-115
+server/services/embedding_service.py
+  s_d9dc368c15fbbd::t_5537c5f90d0153 1-48
+server/services/llm_tokenizer.py
+  s_d9dc368c15fbbd::t_0257d29f9229db 1-94
+server/services/memory_service.py
+  s_d9dc368c15fbbd::t_2e1d2806e58b22 1-438
+server/services/retrieval_service.py
+  s_d9dc368c15fbbd::t_38008409299e63 1-188
+server/services/safety_service.py
+  s_d9dc368c15fbbd::t_0c5c4b5aeb93cc 1-58
+server/services/session_manager.py
+  s_d9dc368c15fbbd::t_f0876393f8849d 1-570
+server/sse/sse_manager.py
+  s_d9dc368c15fbbd::t_5b3d4f1f2ba1ea 1-56
+server/storage/sqlite_client.py
+  s_d9dc368c15fbbd::t_8fd54f380e09be 1-692
+server/utils/font_obfuscate.py
+  s_d9dc368c15fbbd::t_40955f480a3ddf 1-60
+tests/test_api.py
+  s_d9dc368c15fbbd::t_b95e2d5ccdbc1b 1-105
+tests/test_api_chats.py
+  s_d9dc368c15fbbd::t_6db6e4863dd0d1 1-169
+tests/test_api_evolutions.py
+  s_d9dc368c15fbbd::t_e8138440d8f28c 1-188
+tests/test_api_memories.py
+  s_d9dc368c15fbbd::t_6b8d4905998776 1-146
+tests/test_api_settings.py
+  s_d9dc368c15fbbd::t_c65084b689a42f 1-165
+tests/test_config.py
+  s_d9dc368c15fbbd::t_4f18e4420c38c6 1-135
+tests/test_font_obfuscate.py
+  s_d9dc368c15fbbd::t_368bfee2c78923 1-109
+tests/test_prompt_loader.py
+  s_d9dc368c15fbbd::t_753adfcd4bc547 1-65
+tests/test_safety_service.py
+  s_d9dc368c15fbbd::t_fda5225c865970 1-49
+tests/test_session_manager.py
+  s_d9dc368c15fbbd::t_efa9328e3e22fd 1-335
+tests/test_sse_manager.py
+  s_d9dc368c15fbbd::t_8704fb845e827f 1-112
+tests/test_storage.py
+  s_d9dc368c15fbbd::t_de84f18686ad40 1-109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "d6633c1cbd17f904bd8e5c79825f5eae735c1af0",
+  "prompts": {},
+  "sessions": {
+    "s_d9dc368c15fbbd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1e15e656-a07f-4139-8918-ec35b6466879",
+        "model": "deepseek-v4-pro"
+      },
+      "human_author": "裴景鑫 <mrpora@163.com>"
+    }
+  }
+}
