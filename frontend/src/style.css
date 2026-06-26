@@ -1,0 +1,127 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══ CSS 变量 ═══ */
+:root {
+  --paper: #FDF9F3;
+  --ink: #3D3226;
+  --smoke: #9B8E7E;
+  --frost: #F3EDE3;
+  --cinnabar: #C44B3A;
+  --old-gold: #B8835A;
+  --c-line-cyan: #4ECDC4;
+  --celadon: #7B9A8E;
+  --moss: #7A9A7E;
+  --persimmon: #E2805C;
+  --border-light: #EBE5DA;
+}
+
+/* ═══ 基础字体 ═══ */
+@font-face {
+  font-family: 'NovelObfuscated';
+  src: url('/assets/fonts/novel-obfuscated.woff2') format('woff2');
+  font-display: block;
+}
+
+/* ═══ 全局基础 ═══ */
+body {
+  font-family: 'Noto Sans SC', 'Source Han Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--paper);
+  color: var(--ink);
+}
+
+/* ═══ 噪点纹理 ═══ */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  opacity: 0.04;
+  pointer-events: none;
+  z-index: 9999;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 200px 200px;
+}
+
+/* ═══ 滚动条 ═══ */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #c4b5a0; border-radius: 3px; }
+
+/* ═══ fade-up ═══ */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  animation: fade-up 0.4s ease both;
+}
+
+/* ═══ fade-in ═══ */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fade-in 0.3s ease both;
+}
+
+/* ═══ slide-up ═══ */
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.animate-slide-up {
+  animation: slide-up 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* ═══ slide-right ═══ */
+@keyframes slide-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.animate-slide-right {
+  animation: slide-right 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* ═══ celadon-pulse ═══ */
+@keyframes celadon-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.animate-celadon-pulse {
+  animation: celadon-pulse 1.5s ease-in-out infinite;
+}
+
+/* ═══ cinnabar-pulse ═══ */
+@keyframes cinnabar-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(196, 75, 58, 0.4); }
+  50% { box-shadow: 0 0 8px 0 rgba(196, 75, 58, 0.4); }
+}
+.animate-cinnabar-pulse {
+  animation: cinnabar-pulse 1.5s ease-in-out infinite;
+}
+
+/* ═══ blink ═══ */
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+.animate-blink {
+  animation: blink 0.8s step-end infinite;
+}
+.typing-cursor::after {
+  content: '|';
+  animation: blink 0.8s step-end infinite;
+}
+
+/* ═══ Vue transition ═══ */
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}

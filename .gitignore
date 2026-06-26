@@ -1,0 +1,58 @@
+# ── 环境变量 ──
+.env
+.env.local
+.env.*.local
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.eggs/
+venv/
+.venv/
+*.so
+
+# ── Node / 前端 ──
+node_modules/
+dist/
+*.tsbuildinfo
+
+# ── 测试 & 覆盖率 ──
+.pytest_cache/
+coverage/
+htmlcov/
+.coverage
+.tox/
+*.cover
+
+# ── IDE & 编辑器 ──
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── 日志 ──
+logs/
+*.log
+
+# ── 数据库运行时文件 ──
+*.db
+*.db-shm
+*.db-wal
+
+# ── 模型（需本地下载） ──
+/models/
+
+# ── 项目运行时数据 ──
+data/*
+!data/seed_novels/
+!data/obfuscation_key.json
+
+# ── 工具配置 ──
+/.claude/
+/.agents/
+skills-lock.json

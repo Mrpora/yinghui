@@ -1,0 +1,109 @@
+# SPDX-FileCopyrightText: 2025-2026  mrpora@163.com
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+"""SQLite 存储层测试。"""
+import asyncio
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def isolate_db(tmp_path, monkeypatch):
+    """使用临时数据库，通过环境变量隔离。"""
+    db_path = str(tmp_path / "test.db")
+    monkeypatch.setenv("SQLITE_PATH", db_path)
+    monkeypatch.setenv("LLM_API_KEY", "sk-test")
+
+    import server.config as cfg
+    monkeypatch.setattr(cfg.config, "SQLITE_PATH", db_path)
+
+    import server.storage.sqlite_client as sc
+    sc._conn = None
+    asyncio.run(sc.init_db())
+
+    import server.prompt_loader as pl
+    pl.PROMPTS = {"test": "mock prompt"}
+
+    yield str(db_path)
+
+    if sc._conn:
+        asyncio.run(sc._conn.close())
+        sc._conn = None
+
+
+class TestUsers:
+    def test_upsert_new_user(self):
+        from server.storage.sqlite_client import upsert_user
+        user = asyncio.run(upsert_user("测试用户"))
+        assert user["user_id"] == "测试用户"
+        assert user["nickname"] == "测试用户"
+
+    def test_upsert_existing_user(self):
+        from server.storage.sqlite_client import upsert_user
+        u1 = asyncio.run(upsert_user("老用户"))
+        u2 = asyncio.run(upsert_user("老用户"))
+        assert u1["user_id"] == u2["user_id"]
+
+    def test_forbidden_nickname(self):
+        from server.storage.sqlite_client import upsert_user
+        with pytest.raises(ValueError):
+            asyncio.run(upsert_user("system"))
+
+
+class TestWorlds:
+    def test_create_and_list(self):
+        from server.storage.sqlite_client import upsert_user, create_world, list_worlds
+        asyncio.run(upsert_user("admin"))
+        wid = asyncio.run(create_world(
+            "admin", "测试世界", "描述", "历史", ["规则1"],
+            {"content": "开始", "time": "黎明"},
+            [{"name": "角色A", "identity": "战士"},
+             {"name": "角色B", "identity": "法师"}],
+        ))
+        assert wid.startswith("world_")
+        worlds = asyncio.run(list_worlds("admin"))
+        assert len(worlds) == 1
+        assert worlds[0]["name"] == "测试世界"
+        assert worlds[0]["character_count"] == 2
+
+    def test_get_world_and_characters(self):
+        from server.storage.sqlite_client import upsert_user, create_world, get_world, get_world_characters
+        asyncio.run(upsert_user("admin"))
+        wid = asyncio.run(create_world(
+            "admin", "世界", "描述", "", [],
+            {"content": "开始", "time": "noon"},
+            [{"name": "角色X", "identity": "骑士"}],
+        ))
+        w = asyncio.run(get_world(wid))
+        assert w is not None
+        assert w["name"] == "世界"
+        chars = asyncio.run(get_world_characters(wid))
+        assert len(chars) == 1
+        assert chars[0]["name"] == "角色X"
+
+    def test_soft_delete(self):
+        from server.storage.sqlite_client import (
+            upsert_user, create_world, get_world, soft_delete_world,
+        )
+        asyncio.run(upsert_user("admin"))
+        wid = asyncio.run(create_world(
+            "admin", "待删除", "", "", [],
+            {"content": "", "time": ""},
+            [{"name": "C", "identity": ""}],
+        ))
+        assert asyncio.run(soft_delete_world(wid, "admin")) is True
+        assert asyncio.run(get_world(wid)) is None
+        assert asyncio.run(soft_delete_world(wid, "admin")) is False
+
+    def test_permission_check(self):
+        from server.storage.sqlite_client import (
+            upsert_user, create_world, get_world, soft_delete_world,
+        )
+        asyncio.run(upsert_user("alice"))
+        asyncio.run(upsert_user("bob"))
+        wid = asyncio.run(create_world(
+            "alice", "A的世界", "", "", [],
+            {"content": "", "time": ""},
+            [{"name": "C", "identity": ""}],
+        ))
+        assert asyncio.run(soft_delete_world(wid, "bob")) is False
+        assert asyncio.run(get_world(wid)) is not None
