@@ -45,22 +45,22 @@ Demo 视频完整展示了 C 线（世界演化）和 A 线（角色对话）的
 
 | 序号 | 内容 | 演示 |
 |------|------|------|
-| C-1 | 创建世界——设定背景、规则、角色、初始事件 | [![创建世界](docs/images/thumbnails/demoC-1.png)](https://www.bilibili.com/video/BV1q6Kb6FEAq?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
-| C-2 | 角色自主互动——导演 Agent 调度角色，角色自主决策、对话 | [![角色自主互动](docs/images/thumbnails/demoC-2.png)](https://www.bilibili.com/video/BV1ZBKb6hEao?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
-| C-3 | 角色冲突——目标对立产生冲突，自主推进升级或化解 | [![角色冲突](docs/images/thumbnails/demoC-3.png)](https://www.bilibili.com/video/BV1qBKb6hE67?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
-| C-4 | 生成小说——演化记录一键转为章节体小说 | [![生成小说](docs/images/thumbnails/demoC-4.png)](https://www.bilibili.com/video/BV1XKKb6pE93?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
-| C-5 | 角色导入对话——小说角色从纸面走出，进入对话界面 | [![角色导入对话](docs/images/thumbnails/demoC-5.png)](https://www.bilibili.com/video/BV1MEKb6LEcQ?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| C-1 | 创建世界——设定背景、规则、角色、初始事件 | [![创建世界](docs/images/thumbnails/cover-C1-world-create-v1.png)](https://www.bilibili.com/video/BV1q6Kb6FEAq?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| C-2 | 角色自主互动——导演 Agent 调度角色，角色自主决策、对话 | [![角色自主互动](docs/images/thumbnails/cover-C2-interaction-v1.png)](https://www.bilibili.com/video/BV1ZBKb6hEao?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| C-3 | 角色冲突——目标对立产生冲突，自主推进升级或化解 | [![角色冲突](docs/images/thumbnails/cover-C3-conflict-v1.png)](https://www.bilibili.com/video/BV1qBKb6hE67?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| C-4 | 生成小说——演化记录一键转为章节体小说 | [![生成小说](docs/images/thumbnails/cover-C4-novel-v1.png)](https://www.bilibili.com/video/BV1XKKb6pE93?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| C-5 | 角色导入对话——小说角色从纸面走出，进入对话界面 | [![角色导入对话](docs/images/thumbnails/cover-C5-import-v1.png)](https://www.bilibili.com/video/BV1MEKb6LEcQ?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
 
 ### A 线：沉浸式角色对话
 
 | 序号 | 内容 | 演示 |
 |------|------|------|
-| A-1 | 角色主动开场——无需用户先说话，角色主动发起问候 | [![角色主动开场](docs/images/thumbnails/demoA-1.png)](https://www.bilibili.com/video/BV1XKKb6pEXa?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
-| A-2 | 记忆写入——Agent 提取用户信息存入永久记忆，后续对话自然唤起 | [![记忆写入](docs/images/thumbnails/demoA-2.png)](https://www.bilibili.com/video/BV19PKb69E94?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
-| A-3 | 时间感知与情绪覆写——角色感知时段，据此调整问候和情绪 | [![时间感知与情绪覆写](docs/images/thumbnails/demoA-3.png)](https://www.bilibili.com/video/BV1QuKb6nEnm?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
-| A-4 | 跨角色记忆共享——不同角色共享对用户的认知，主动提起过往 | [![跨角色记忆共享](docs/images/thumbnails/demoA-4.png)](https://www.bilibili.com/video/BV1QuKb6nEpt?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
-| A-5 | 安全风控——检测到违规内容时拒绝回复并记录日志 | [![安全风控](docs/images/thumbnails/demoA-5.png)](https://www.bilibili.com/video/BV1GTKb6XE2J?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
-| A-6 | 报警日志——触发安全阈值后自动通知管理员（涉及隐私，未公开） | ![报警日志](docs/images/thumbnails/demoA-6.png) |
+| A-1 | 角色主动开场——无需用户先说话，角色主动发起问候 | [![角色主动开场](docs/images/thumbnails/cover-A1-greeting-v1.png)](https://www.bilibili.com/video/BV1XKKb6pEXa?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| A-2 | 记忆写入——Agent 提取用户信息存入永久记忆，后续对话自然唤起 | [![记忆写入](docs/images/thumbnails/cover-A2-memory-v1.png)](https://www.bilibili.com/video/BV19PKb69E94?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| A-3 | 时间感知与情绪覆写——角色感知时段，据此调整问候和情绪 | [![时间感知与情绪覆写](docs/images/thumbnails/cover-A3-time-v1.png)](https://www.bilibili.com/video/BV1QuKb6nEnm?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| A-4 | 跨角色记忆共享——不同角色共享对用户的认知，主动提起过往 | [![跨角色记忆共享](docs/images/thumbnails/cover-A4-share-v1.png)](https://www.bilibili.com/video/BV1QuKb6nEpt?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| A-5 | 安全风控——检测到违规内容时拒绝回复并记录日志 | [![安全风控](docs/images/thumbnails/cover-A5-safety-v1.png)](https://www.bilibili.com/video/BV1GTKb6XE2J?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| A-6 | 报警日志——触发安全阈值后自动通知管理员（涉及隐私，未公开） | ![报警日志](docs/images/thumbnails/cover-A6-alert-v1.png) |
 
 ## 功能
 
