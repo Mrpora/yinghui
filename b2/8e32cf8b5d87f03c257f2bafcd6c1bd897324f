@@ -1,0 +1,29 @@
+docs/gifs/demoA-1.gif
+  s_3d68bff8ddf881::t_ac7bab4468d676 1-3
+docs/gifs/demoA-3.gif
+  s_3d68bff8ddf881::t_3b532d13a76168 1-3
+docs/gifs/demoA-5.gif
+  s_3d68bff8ddf881::t_c9923681375985 1-3
+docs/gifs/demoC-1.gif
+  s_3d68bff8ddf881::t_e8ece65449f72b 1-3
+docs/gifs/demoC-4.gif
+  s_3d68bff8ddf881::t_a87fbf188ca67f 1-3
+docs/gifs/demoC-5.gif
+  s_3d68bff8ddf881::t_28e752d82e84de 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.14",
+  "base_commit_sha": "b28e32cf8b5d87f03c257f2bafcd6c1bd897324f",
+  "prompts": {},
+  "sessions": {
+    "s_3d68bff8ddf881": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5764d98c-5470-4fc2-9215-0247b64b624c",
+        "model": "deepseek-v4-pro"
+      },
+      "human_author": "裴景鑫 <mrpora@163.com>"
+    }
+  }
+}
