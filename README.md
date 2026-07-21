@@ -5,9 +5,14 @@
 [![Node](https://img.shields.io/badge/node-20+-green.svg)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/docker-supported-blue.svg)](docker-compose.yml)
 [![Tests](https://img.shields.io/badge/tests-98_passed-brightgreen.svg)](tests/)
+[![Stars](https://img.shields.io/github/stars/mrpora/yinghui?style=social)](https://github.com/mrpora/yinghui)
 
-**创建架空世界，然后放手——角色自主互动、冲突、和解，世界在你眼前自行演化。
-演化结束后一键生成章节体小说，进入任意角色视角与 ta 对话。ta 记得你。**
+![世界演化 Demo](docs/gifs/demoC-2.gif)
+
+> 创建架空世界，然后放手——角色自主互动、冲突、和解，世界在你眼前自行演化。
+> 演化结束后一键生成章节体小说，进入任意角色视角与 ta 对话。ta 记得你。
+
+[🚀 快速开始](#快速开始)　[🎬 观看完整 Demo](#demo)　[⭐ Star 本项目](https://github.com/mrpora/yinghui)
 
 > **这是一个 Demo 项目**，它不追求功能完整或生产级质量，仅供学习、
 > 研究和概念验证。
@@ -32,28 +37,30 @@
 
 ## Demo
 
+> 🎬 以下为完整 Demo 演示视频，点击缩略图跳转 B站观看。README 顶部嵌有 GIF 预览。
+
 Demo 视频完整展示了 C 线（世界演化）和 A 线（角色对话）的核心流程。
 
 ### C 线：世界自主演化
 
-| 序号 | 内容 | 视频 |
+| 序号 | 内容 | 演示 |
 |------|------|------|
-| C-1 | 创建世界——设定背景、规则、角色、初始事件 | [▶ 观看](docs/videos/demoC-1.mp4) |
-| C-2 | 角色自主互动——导演 Agent 调度角色，角色自主决策、对话 | [▶ 观看](docs/videos/demoC-2.mp4) |
-| C-3 | 角色冲突——目标对立产生冲突，自主推进升级或化解 | [▶ 观看](docs/videos/demoC-3.mp4) |
-| C-4 | 用户干预——演化中插入自定义事件，角色自主应对 | [▶ 观看](docs/videos/demoC-4.mp4) |
-| C-5 | 生成小说——演化记录一键转为章节体小说 | [▶ 观看](docs/videos/demoC-5.mp4) |
+| C-1 | 创建世界——设定背景、规则、角色、初始事件 | [![创建世界](docs/images/thumbnails/demoC-1.png)](https://www.bilibili.com/video/BV1q6Kb6FEAq?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| C-2 | 角色自主互动——导演 Agent 调度角色，角色自主决策、对话 | [![角色自主互动](docs/images/thumbnails/demoC-2.png)](https://www.bilibili.com/video/BV1ZBKb6hEao?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| C-3 | 角色冲突——目标对立产生冲突，自主推进升级或化解 | [![角色冲突](docs/images/thumbnails/demoC-3.png)](https://www.bilibili.com/video/BV1qBKb6hE67?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| C-4 | 生成小说——演化记录一键转为章节体小说 | [![生成小说](docs/images/thumbnails/demoC-4.png)](https://www.bilibili.com/video/BV1XKKb6pE93?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| C-5 | 角色导入对话——小说角色从纸面走出，进入对话界面 | [![角色导入对话](docs/images/thumbnails/demoC-5.png)](https://www.bilibili.com/video/BV1MEKb6LEcQ?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
 
 ### A 线：沉浸式角色对话
 
-| 序号 | 内容 | 视频 |
+| 序号 | 内容 | 演示 |
 |------|------|------|
-| A-1 | 角色主动开场——无需用户先说话，角色主动发起问候 | [▶ 观看](docs/videos/demoA-1.mp4) |
-| A-2 | 记忆写入——用户告知姓名，Agent 存入永久记忆，后续对话自然唤起 | [▶ 观看](docs/videos/demoA-2.mp4) |
-| A-3 | 时间感知与情绪覆写——角色感知时段，据此调整问候和情绪 | [▶ 观看](docs/videos/demoA-3.mp4) |
-| A-4 | 跨角色记忆共享——不同角色共享对用户的认知，主动提起过往 | [▶ 观看](docs/videos/demoA-4.mp4) |
-| A-5 | 安全风控——检测到违规内容时拒绝回复并记录日志 | [▶ 观看](docs/videos/demoA-5.mp4) |
-| A-6 | 报警日志——触发安全阈值后自动通知管理员 | [▶ 观看](docs/videos/demoA-6.mp4) |
+| A-1 | 角色主动开场——无需用户先说话，角色主动发起问候 | [![角色主动开场](docs/images/thumbnails/demoA-1.png)](https://www.bilibili.com/video/BV1XKKb6pEXa?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| A-2 | 记忆写入——Agent 提取用户信息存入永久记忆，后续对话自然唤起 | [![记忆写入](docs/images/thumbnails/demoA-2.png)](https://www.bilibili.com/video/BV19PKb69E94?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| A-3 | 时间感知与情绪覆写——角色感知时段，据此调整问候和情绪 | [![时间感知与情绪覆写](docs/images/thumbnails/demoA-3.png)](https://www.bilibili.com/video/BV1QuKb6nEnm?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| A-4 | 跨角色记忆共享——不同角色共享对用户的认知，主动提起过往 | [![跨角色记忆共享](docs/images/thumbnails/demoA-4.png)](https://www.bilibili.com/video/BV1QuKb6nEpt?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| A-5 | 安全风控——检测到违规内容时拒绝回复并记录日志 | [![安全风控](docs/images/thumbnails/demoA-5.png)](https://www.bilibili.com/video/BV1GTKb6XE2J?vd_source=692e2948ccafe3cc25d3ab2a13e09089) |
+| A-6 | 报警日志——触发安全阈值后自动通知管理员（涉及隐私，未公开） | ![报警日志](docs/images/thumbnails/demoA-6.png) |
 
 ## 功能
 
@@ -64,9 +71,10 @@ Demo 视频完整展示了 C 线（世界演化）和 A 线（角色对话）的
 | **角色互动** | 角色基于自身设定自主决策、对话、行动，无需人工编写剧本 | C-2 |
 | **角色冲突** | 角色间因目标或立场对立产生冲突，自主推进冲突升级或化解 | C-3 |
 | **剧情分支选择** | 导演在关键节点暂停演化，提供多条分支供用户选择 | C-2, C-3 |
-| **用户干预** | 演化过程中随时插入自定义事件，改变剧情走向 | C-4 |
+| **用户干预** | 演化过程中随时插入自定义事件，改变剧情走向 | C-2, C-3 |
 | **演化可视化** | 时间线展示每轮完整记录——事件、对话、关系变化 | C-2, C-3 |
-| **小说一键生成** | 演化记录自动转为章节体小说。写作 Agent 逐章创作，审查 Agent 润色 | C-5 |
+| **小说一键生成** | 演化记录自动转为章节体小说。写作 Agent 逐章创作，审查 Agent 润色 | C-4 |
+| **角色导入对话** | 小说角色从纸面走出，进入对话界面——C 线到 A 线的完整闭环 | C-5 |
 | **沉浸式角色对话** | 选择角色进入其视角对话——角色恪守自身认知边界，只知亲身经历 | A-1, A-2 |
 | **多层记忆系统** | 即时记忆 + 永久记忆（BM25 + 向量混合检索），跨角色共享对用户的认知 | A-2, A-4 |
 | **主动关怀** | 角色感知时间流逝，根据时段和上次对话间隔主动发起话题 | A-3 |
