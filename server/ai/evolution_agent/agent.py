@@ -9,6 +9,7 @@
 import asyncio
 import json
 import logging
+import re
 
 from server.config import config
 from server.services.session_manager import (
@@ -126,6 +127,55 @@ class PipelineOrchestrator:
     def _channel(self, session_id: str) -> str:
         return f"evolution:{session_id}"
 
+    async def _maybe_compact_director_context(self, session: Session):
+        """导演上下文超阈值时用时间线 round_summary 重建（决策 D6）。
+
+        保留 system 消息与最近两轮完整原文，中段替换为 [历史压缩] user 消息
+        （全部轮次摘要 + 路径判定一行式）。切分点位于某条 `[第 N 轮]` user
+        消息开头，不产生半轮截断。压缩只改内存，轮末随 _persist_contexts 落盘。
+        """
+        def _ctx_size(msgs: list[dict]) -> int:
+            total = 0
+            for m in msgs:
+                total += len(str(m.get("content") or ""))
+                total += len(json.dumps(m.get("tool_calls") or [], ensure_ascii=False))
+            return total
+
+        if _ctx_size(session.director_context) < config.EVOLUTION_COMPACT_THRESHOLD_CHARS:
+            return
+
+        round_num = session.current_round            # run_round 开头已自增
+        keep_from_round = max(1, round_num - 2)      # 保留 keep_from_round..round_num-1 两轮
+
+        timeline = await self.sessions.get_timeline(session.id)
+        digest_parts: list[str] = []
+        for e in timeline:
+            if e.get("type") == "round_summary":
+                digest_parts.append(f"### 第 {e.get('round')} 轮摘要\n{e.get('content', '')}")
+            elif e.get("type") == "director_path":
+                content = str(e.get("content", "")).replace("\n", " ")
+                digest_parts.append(f"- 第 {e.get('round')} 轮路径判定：{content[:120]}")
+        digest = "\n\n".join(digest_parts) or "（无轮次摘要）"
+
+        cut = len(session.director_context)
+        for i, m in enumerate(session.director_context):
+            content = str(m.get("content") or "")
+            if m.get("role") == "user" and content.startswith("[第"):
+                match = re.match(r"\[第 (\d+) 轮\]", content)
+                if match and int(match.group(1)) >= keep_from_round:
+                    cut = i
+                    break
+
+        session.director_context = (
+            [session.director_context[0]]
+            + [{"role": "user",
+                "content": (f"[历史压缩] 第 1..{keep_from_round - 1} 轮官方轮次摘要如下：\n\n"
+                            f"{digest}")}]
+            + session.director_context[cut:]
+        )
+        logger.info("🗜️ 导演上下文已压缩 session=%s 保留轮次>=%d 消息数=%d",
+                    session.id, keep_from_round, len(session.director_context))
+
     # ── 主入口 ──
 
     async def run_round(self, session_id: str):
@@ -142,6 +192,8 @@ class PipelineOrchestrator:
             "type": "round_start",
             "data": {"round": round_num, "max_rounds": session.max_rounds},
         })
+
+        await self._maybe_compact_director_context(session)
 
         try:
             if round_num == 1:
