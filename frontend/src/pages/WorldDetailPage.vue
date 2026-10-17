@@ -42,6 +42,21 @@ function emptyCharacter(): CharacterConfig {
   }
 }
 
+const MIN_CHARACTERS = 3
+const MAX_CHARACTERS = 10
+
+function addCharacter() {
+  if (characters.value.length >= MAX_CHARACTERS) return
+  characters.value.push(emptyCharacter())
+  attitudesTexts.value.push('')
+}
+
+function removeCharacter(i: number) {
+  if (characters.value.length <= MIN_CHARACTERS) return
+  characters.value.splice(i, 1)
+  attitudesTexts.value.splice(i, 1)
+}
+
 function attitudesToText(a: Record<string, string>): string {
   return Object.entries(a).map(([k, v]) => `${k}: ${v}`).join('\n')
 }
@@ -112,9 +127,14 @@ async function handleSave() {
     errorMsg.value = '请输入世界名称'
     return
   }
+  const unnamed = characters.value.findIndex((c) => !c.name.trim())
+  if (unnamed !== -1) {
+    errorMsg.value = `角色 ${unnamed + 1} 未填写名称`
+    return
+  }
   const validChars = characters.value.filter(c => c.name.trim())
-  if (validChars.length < 1) {
-    errorMsg.value = '请至少填写 1 个角色'
+  if (validChars.length < MIN_CHARACTERS) {
+    errorMsg.value = `至少需要 ${MIN_CHARACTERS} 个角色（当前已填 ${validChars.length} 个）`
     return
   }
   isSubmitting.value = true
@@ -129,10 +149,13 @@ async function handleSave() {
         content: initialEventContent.value.trim(),
         time: initialEventTime.value.trim(),
       },
-      characters: characters.value.map((ch, i) => ({
-        ...ch,
-        attitudes: textToAttitudes(attitudesTexts.value[i] || ''),
-      })),
+      characters: characters.value
+        .map((ch, i) => ({ ch, i }))
+        .filter(({ ch }) => ch.name.trim())
+        .map(({ ch, i }) => ({
+          ...ch,
+          attitudes: textToAttitudes(attitudesTexts.value[i] || ''),
+        })),
     })
     isEditing.value = false
   } catch (e: unknown) {
@@ -294,10 +317,34 @@ async function startEvolution() {
         </section>
 
         <section>
-          <h2 class="text-sm text-smoke tracking-widest mb-3 border-b border-border-light pb-1">角色设定</h2>
-          <div class="grid grid-cols-3 gap-6">
+          <div class="flex items-center justify-between mb-3 border-b border-border-light pb-1">
+            <h2 class="text-sm text-smoke tracking-widest">角色设定</h2>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-smoke">{{ characters.length }} / {{ MAX_CHARACTERS }}</span>
+              <button
+                class="text-xs text-old-gold border border-old-gold/30 rounded px-2 py-0.5 hover:bg-old-gold hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                :disabled="characters.length >= MAX_CHARACTERS"
+                title="最多 10 个角色"
+                @click="addCharacter"
+              >
+                ＋ 添加角色
+              </button>
+            </div>
+          </div>
+
+          <div class="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
             <div v-for="(ch, i) in characters" :key="i" class="bg-white rounded-xl border border-border-light p-5 space-y-3">
-              <p class="text-xs text-old-gold tracking-widest">角色 {{ i + 1 }}</p>
+              <p class="text-xs text-old-gold tracking-widest flex items-center justify-between">
+                <span>角色 {{ i + 1 }}</span>
+                <button
+                  v-if="characters.length > MIN_CHARACTERS"
+                  class="text-cinnabar/60 hover:text-cinnabar text-xs"
+                  title="删除该角色"
+                  @click="removeCharacter(i)"
+                >
+                  删除
+                </button>
+              </p>
               <div class="grid grid-cols-2 gap-3">
                 <div>
                   <label class="text-xs text-smoke block mb-0.5">名称</label>
