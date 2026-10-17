@@ -5,6 +5,8 @@
 import json
 import pytest
 
+from tests.helpers import make_characters
+
 
 @pytest.fixture(autouse=True)
 def isolate_db(tmp_path, monkeypatch):
@@ -47,7 +49,7 @@ def _setup_chat_prereqs(client, user_id):
         "user_id": user_id, "name": "对话测试世界", "description": "",
         "world_history": "", "rules": [],
         "initial_event": {"content": "", "time": ""},
-        "characters": [{"name": "角色C", "identity": "战士"}],
+        "characters": make_characters(3),
     })
     wid = wid_res.json()["world_id"]
 
@@ -78,7 +80,7 @@ def _setup_chat_prereqs(client, user_id):
             "source_character_id, character_snapshot, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             ("nc_test_char", nid, user_id, source_cid,
-             json.dumps({"name": "角色C", "identity": "战士"}), now),
+             json.dumps({"name": "角色1", "identity": "测试身份"}), now),
         )
         await db.commit()
         return nid, "nc_test_char"
@@ -134,7 +136,7 @@ class TestChatCharacters:
         assert res.status_code == 200
         chars = res.json()["characters"]
         assert len(chars) == 1
-        assert chars[0]["name"] == "角色C"
+        assert chars[0]["name"] == "角色1"
 
     def test_remove_character(self, client):
         """移除角色。"""

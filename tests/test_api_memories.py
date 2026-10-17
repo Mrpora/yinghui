@@ -4,6 +4,8 @@
 """记忆 API 端点测试——列表/删除/更新过期/清空。"""
 import pytest
 
+from tests.helpers import make_characters
+
 
 @pytest.fixture(autouse=True)
 def isolate_db(tmp_path, monkeypatch):
@@ -50,7 +52,7 @@ def _setup_world_and_novel(client, user_id):
         "user_id": user_id, "name": "记忆测试世界", "description": "desc",
         "world_history": "", "rules": [],
         "initial_event": {"content": "开始", "time": "黎明"},
-        "characters": [{"name": "角色M", "identity": "法师"}],
+        "characters": make_characters(3),
     })
     wid = wid_res.json()["world_id"]
 
@@ -87,7 +89,7 @@ def _setup_world_and_novel(client, user_id):
             "source_character_id, character_snapshot, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             (cid, nid, user_id, source_cid,
-             json.dumps({"name": "角色M", "identity": "法师"}), now),
+             json.dumps({"name": "角色1", "identity": "测试身份"}), now),
         )
         await db.commit()
         return nid, cid

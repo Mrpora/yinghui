@@ -7,6 +7,8 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.helpers import make_characters
+
 
 @pytest.fixture(autouse=True)
 def isolate_db(tmp_path, monkeypatch):
@@ -68,7 +70,7 @@ class TestWorlds:
             "user_id": uid, "name": "测试世界", "description": "描述",
             "world_history": "", "rules": [],
             "initial_event": {"content": "开始", "time": "黎明"},
-            "characters": [{"name": "A", "identity": "战士"}],
+            "characters": make_characters(3),
         })
         assert res.status_code == 201
         wid = res.json()["world_id"]
@@ -84,7 +86,7 @@ class TestWorlds:
             "user_id": uid, "name": "我的世界", "description": "",
             "world_history": "", "rules": [],
             "initial_event": {"content": "", "time": ""},
-            "characters": [{"name": "C", "identity": ""}],
+            "characters": make_characters(3),
         })
         wid = res.json()["world_id"]
         res2 = client.post(f"/api/worlds/delete?world_id={wid}&user_id={uid}")
@@ -98,7 +100,7 @@ class TestWorlds:
             "user_id": "alice", "name": "A的世界", "description": "",
             "world_history": "", "rules": [],
             "initial_event": {"content": "", "time": ""},
-            "characters": [{"name": "C", "identity": ""}],
+            "characters": make_characters(3),
         })
         wid = res.json()["world_id"]
         res2 = client.post(f"/api/worlds/delete?world_id={wid}&user_id=bob")

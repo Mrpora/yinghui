@@ -4,6 +4,8 @@
 """演化 API 端点测试——会话 CRUD + 时间线。"""
 import pytest
 
+from tests.helpers import make_characters
+
 
 @pytest.fixture(autouse=True)
 def isolate_db(tmp_path, monkeypatch):
@@ -55,10 +57,7 @@ def _create_world(client, user_id, name="演化测试世界"):
         "user_id": user_id, "name": name, "description": "测试",
         "world_history": "", "rules": [],
         "initial_event": {"content": "开始", "time": "黎明"},
-        "characters": [
-            {"name": "角色A", "identity": "战士"},
-            {"name": "角色B", "identity": "法师"},
-        ],
+        "characters": make_characters(3),
     })
     return res.json()["world_id"]
 
@@ -101,7 +100,7 @@ class TestEvolutionSessionLifecycle:
         assert res.status_code == 200
         data = res.json()
         assert data["evolution_id"] == eid
-        assert data["character_names"] == ["角色A", "角色B"]
+        assert data["character_names"] == ["角色1", "角色2", "角色3"]
 
     def test_detail_requires_owner(self, client):
         uid = _login(client, "evo_owner")

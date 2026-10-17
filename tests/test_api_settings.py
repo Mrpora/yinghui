@@ -4,6 +4,8 @@
 """设置 API 端点测试——关怀等级获取与更新。"""
 import pytest
 
+from tests.helpers import make_characters
+
 
 @pytest.fixture(autouse=True)
 def isolate_db(tmp_path, monkeypatch):
@@ -59,7 +61,7 @@ class TestCareLevel:
             "user_id": uid, "name": "t", "description": "",
             "world_history": "", "rules": [],
             "initial_event": {"content": "", "time": ""},
-            "characters": [{"name": "c", "identity": ""}],
+            "characters": make_characters(3),
         })
         wid = wid_res.json()["world_id"]
 
@@ -118,7 +120,7 @@ class TestCareLevel:
             "user_id": "alice", "name": "t", "description": "",
             "world_history": "", "rules": [],
             "initial_event": {"content": "", "time": ""},
-            "characters": [{"name": "c", "identity": ""}],
+            "characters": make_characters(3),
         })
         wid = wid_res.json()["world_id"]
 

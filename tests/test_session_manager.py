@@ -58,6 +58,9 @@ async def _create_test_world(user_id="test_user"):
             {"name": "李四", "identity": "法师", "personality": "冷静", "speech_style": "优雅",
              "goal": "探寻真相", "attitudes": {"张三": "怀疑"}, "backstory": "来自远方",
              "initial_location": "塔顶", "initial_state": "沉思"},
+            {"name": "王五", "identity": "游侠", "personality": "洒脱", "speech_style": "诙谐",
+             "goal": "寻找故人", "attitudes": {"张三": "观望"}, "backstory": "浪迹天涯",
+             "initial_location": "渡口", "initial_state": "小酌"},
         ],
     )
     chars = await get_world_characters(wid)
@@ -82,8 +85,8 @@ class TestWorldConfigBuilding:
         assert wc.world.rules == ["规则1"]
         assert wc.initial_event.content == "初始事件"
         assert wc.initial_event.time == "黎明"
-        assert len(wc.characters) == 2
-        assert wc.character_names == ["张三", "李四"]
+        assert len(wc.characters) == 3
+        assert wc.character_names == ["张三", "李四", "王五"]
 
     @pytest.mark.asyncio
     async def test_get_character_by_name(self):
@@ -154,9 +157,9 @@ class TestSessionLifecycle:
         assert session.world_id == wid
         assert session.status == SessionStatus.IDLE
         assert session.current_round == 0
-        assert session.character_names == ["张三", "李四"]
+        assert session.character_names == ["张三", "李四", "王五"]
         assert len(session.director_context) == 1
-        assert len(session.character_contexts) == 2
+        assert len(session.character_contexts) == 3
 
     @pytest.mark.asyncio
     async def test_get_session(self):

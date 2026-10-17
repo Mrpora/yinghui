@@ -5,6 +5,8 @@
 import asyncio
 import pytest
 
+from tests.helpers import make_characters
+
 
 @pytest.fixture(autouse=True)
 def isolate_db(tmp_path, monkeypatch):
@@ -56,14 +58,13 @@ class TestWorlds:
         wid = asyncio.run(create_world(
             "admin", "测试世界", "描述", "历史", ["规则1"],
             {"content": "开始", "time": "黎明"},
-            [{"name": "角色A", "identity": "战士"},
-             {"name": "角色B", "identity": "法师"}],
+            make_characters(3),
         ))
         assert wid.startswith("world_")
         worlds = asyncio.run(list_worlds("admin"))
         assert len(worlds) == 1
         assert worlds[0]["name"] == "测试世界"
-        assert worlds[0]["character_count"] == 2
+        assert worlds[0]["character_count"] == 3
 
     def test_get_world_and_characters(self):
         from server.storage.sqlite_client import upsert_user, create_world, get_world, get_world_characters
@@ -71,14 +72,14 @@ class TestWorlds:
         wid = asyncio.run(create_world(
             "admin", "世界", "描述", "", [],
             {"content": "开始", "time": "noon"},
-            [{"name": "角色X", "identity": "骑士"}],
+            make_characters(3),
         ))
         w = asyncio.run(get_world(wid))
         assert w is not None
         assert w["name"] == "世界"
         chars = asyncio.run(get_world_characters(wid))
-        assert len(chars) == 1
-        assert chars[0]["name"] == "角色X"
+        assert len(chars) == 3
+        assert chars[0]["name"] == "角色1"
 
     def test_soft_delete(self):
         from server.storage.sqlite_client import (
@@ -88,7 +89,7 @@ class TestWorlds:
         wid = asyncio.run(create_world(
             "admin", "待删除", "", "", [],
             {"content": "", "time": ""},
-            [{"name": "C", "identity": ""}],
+            make_characters(3),
         ))
         assert asyncio.run(soft_delete_world(wid, "admin")) is True
         assert asyncio.run(get_world(wid)) is None
@@ -103,7 +104,7 @@ class TestWorlds:
         wid = asyncio.run(create_world(
             "alice", "A的世界", "", "", [],
             {"content": "", "time": ""},
-            [{"name": "C", "identity": ""}],
+            make_characters(3),
         ))
         assert asyncio.run(soft_delete_world(wid, "bob")) is False
         assert asyncio.run(get_world(wid)) is not None
