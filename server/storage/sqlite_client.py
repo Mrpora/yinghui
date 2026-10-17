@@ -18,6 +18,24 @@ def now_ms() -> int:
     return int(datetime.now(timezone.utc).timestamp() * 1000)
 
 
+# 角色强调色调色板——上限 10 人需 ≥10 色，第 10-12 色为本次扩充
+_CHARACTER_PALETTE = [
+    "#7B9EFF", "#4ECDC4", "#FF6B5B", "#F5C842", "#B8835A", "#7B9A8E",
+    "#E2805C", "#9B8E7E", "#C44B3A", "#8E7CC3", "#5F9EA0", "#D4A5A5",
+]
+
+
+def _pick_accent_color(name: str, assigned: set[str]) -> str:
+    """按角色名哈希取色，撞色时向后探测第一个未用色。"""
+    h = sum(ord(c) for c in name)
+    idx = h % len(_CHARACTER_PALETTE)
+    offset = 0
+    while (_CHARACTER_PALETTE[(idx + offset) % len(_CHARACTER_PALETTE)] in assigned
+           and offset < len(_CHARACTER_PALETTE)):
+        offset += 1
+    return _CHARACTER_PALETTE[(idx + offset) % len(_CHARACTER_PALETTE)]
+
+
 _conn: aiosqlite.Connection | None = None
 _lock = asyncio.Lock()
 
@@ -289,18 +307,10 @@ async def create_world(user_id: str, name: str, description: str, world_history:
          json.dumps(rules, ensure_ascii=False),
          json.dumps(initial_event, ensure_ascii=False), now),
     )
-    PALETTE = ["#7B9EFF", "#4ECDC4", "#FF6B5B", "#F5C842", "#B8835A", "#7B9A8E", "#E2805C", "#9B8E7E", "#C44B3A"]
     assigned: set[str] = set()
     for i, char in enumerate(characters):
         char_id = f"char_{uuid4().hex[:8]}"
-        accent = char.get("accent_color", "")
-        if not accent:
-            h = sum(ord(c) for c in char["name"])
-            idx = h % len(PALETTE)
-            offset = 0
-            while PALETTE[(idx + offset) % len(PALETTE)] in assigned and offset < len(PALETTE):
-                offset += 1
-            accent = PALETTE[(idx + offset) % len(PALETTE)]
+        accent = char.get("accent_color", "") or _pick_accent_color(char["name"], assigned)
         assigned.add(accent)
         await conn.execute(
             "INSERT INTO world_characters (character_id, world_id, name, identity, "
@@ -340,18 +350,10 @@ async def update_world(world_id: str, user_id: str, name: str, description: str,
         await conn.rollback()
         return False
     await conn.execute("DELETE FROM world_characters WHERE world_id = ?", (world_id,))
-    PALETTE = ["#7B9EFF", "#4ECDC4", "#FF6B5B", "#F5C842", "#B8835A", "#7B9A8E", "#E2805C", "#9B8E7E", "#C44B3A"]
     assigned: set[str] = set()
     for i, char in enumerate(characters):
         char_id = f"char_{uuid4().hex[:8]}"
-        accent = char.get("accent_color", "")
-        if not accent:
-            h = sum(ord(c) for c in char["name"])
-            idx = h % len(PALETTE)
-            offset = 0
-            while PALETTE[(idx + offset) % len(PALETTE)] in assigned and offset < len(PALETTE):
-                offset += 1
-            accent = PALETTE[(idx + offset) % len(PALETTE)]
+        accent = char.get("accent_color", "") or _pick_accent_color(char["name"], assigned)
         assigned.add(accent)
         await conn.execute(
             "INSERT INTO world_characters (character_id, world_id, name, identity, "

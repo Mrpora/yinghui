@@ -124,3 +124,19 @@ class TestWorlds:
                 {"content": "", "time": ""},
                 [{"name": f"角色{i}", "identity": ""} for i in range(1, 12)],
             ))
+
+    def test_create_world_ten_characters_unique_colors(self):
+        from server.storage.sqlite_client import (
+            upsert_user, create_world, get_world_characters,
+        )
+        asyncio.run(upsert_user("palette"))
+        chars = [{"name": f"角色{i}", "identity": "测试"} for i in range(1, 11)]
+        wid = asyncio.run(create_world(
+            "palette", "十色世界", "描述", "", [],
+            {"content": "", "time": ""},
+            chars,
+        ))
+        rows = asyncio.run(get_world_characters(wid))
+        colors = [r["accent_color"] for r in rows]
+        assert len(colors) == 10
+        assert len(set(colors)) == 10

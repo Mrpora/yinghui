@@ -187,10 +187,8 @@ def _insert_world(conn, world_id, user_id, name, description, rules, initial_eve
     )
 
 
-_PALETTE = [
-    "#7B9EFF", "#4ECDC4", "#FF6B5B", "#F5C842", "#B8835A",
-    "#7B9A8E", "#E2805C", "#9B8E7E", "#C44B3A",
-]
+_PALETTE = ["#7B9EFF", "#4ECDC4", "#FF6B5B", "#F5C842", "#B8835A", "#7B9A8E",
+            "#E2805C", "#9B8E7E", "#C44B3A", "#8E7CC3", "#5F9EA0", "#D4A5A5"]
 
 
 def _accent_color(name: str, used: set[str]) -> str:
