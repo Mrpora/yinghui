@@ -20,6 +20,11 @@ from server.ai.evolution_agent.director_tools import DirectorTools, DIRECTOR_TOO
 
 logger = logging.getLogger(__name__)
 
+
+def compute_max_notifies(char_count: int) -> int:
+    """互动环节单轮 notify_actor 上限：min(角色数 × 3, 15)。"""
+    return min(char_count * 3, 15)
+
 # ── 共享状态：orchestrator ↔ REST router ──
 
 _session_events: dict[str, asyncio.Event] = {}
@@ -626,7 +631,7 @@ class PipelineOrchestrator:
 
     async def _handle_interaction(self, session: Session):
         char_count = len(session.character_contexts)
-        max_notifies = min(char_count * 2, 6)
+        max_notifies = compute_max_notifies(char_count)
         logger.info("💬 [步骤3.2] 互动处理 session=%s round=%d chars=%d max_notifies=%d",
                    session.id, session.current_round, char_count, max_notifies)
         await self._execute_director_step(

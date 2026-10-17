@@ -373,3 +373,14 @@ class TestMaxRoundsScaling:
         mgr = SessionManager()
         session = await mgr.create("cap_user", wid)
         assert session.max_rounds == 30   # round(20×10/3)=67 被 30 封顶
+
+
+class TestMaxNotifiesFormula:
+    """互动行动上限公式（决策：按参与人数更大弹性，min(n×3, 15)）。"""
+
+    def test_compute_max_notifies(self):
+        from server.ai.evolution_agent.agent import compute_max_notifies
+        assert compute_max_notifies(3) == 9
+        assert compute_max_notifies(4) == 12
+        assert compute_max_notifies(5) == 15
+        assert compute_max_notifies(10) == 15
