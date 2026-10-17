@@ -331,7 +331,12 @@ async def create_world(user_id: str, name: str, description: str, world_history:
 async def update_world(world_id: str, user_id: str, name: str, description: str,
                        world_history: str, rules: list[str], initial_event: dict,
                        characters: list[dict]) -> bool:
-    """更新世界及角色数据。先删旧角色再写新角色，在一个事务内完成。"""
+    """更新世界及角色数据。
+
+    角色同步按名字 diff-upsert（行级匹配）：同名角色原位 UPDATE 保留
+    character_id（novel_characters.source_character_id 外键引用它）；
+    新名 INSERT；未匹配的存量行 DELETE。全部操作在同一事务内完成。
+    """
     if len(characters) < 3 or len(characters) > 10:
         raise ValueError("角色数量必须在 3-10 之间")
     from uuid import uuid4
@@ -349,23 +354,56 @@ async def update_world(world_id: str, user_id: str, name: str, description: str,
     if cursor.rowcount == 0:
         await conn.rollback()
         return False
-    await conn.execute("DELETE FROM world_characters WHERE world_id = ?", (world_id,))
+
+    existing_rows = await get_world_characters(world_id)
+    rows_by_name: dict[str, list] = {}
+    for r in existing_rows:
+        rows_by_name.setdefault(r["name"], []).append(r)
+
     assigned: set[str] = set()
+    matched_ids: set[str] = set()
+
     for i, char in enumerate(characters):
-        char_id = f"char_{uuid4().hex[:8]}"
-        accent = char.get("accent_color", "") or _pick_accent_color(char["name"], assigned)
-        assigned.add(accent)
+        candidates = rows_by_name.get(char["name"]) or []
+        row = next((r for r in candidates if r["character_id"] not in matched_ids), None)
+        if row is not None:
+            matched_ids.add(row["character_id"])
+            accent = char.get("accent_color", "") or row["accent_color"]
+            await conn.execute(
+                "UPDATE world_characters SET identity = ?, personality = ?, "
+                "speech_style = ?, goal = ?, attitudes = ?, backstory = ?, "
+                "initial_location = ?, initial_state = ?, accent_color = ?, "
+                "sort_order = ? WHERE character_id = ?",
+                (char.get("identity", ""), char.get("personality", ""),
+                 char.get("speech_style", ""), char.get("goal", ""),
+                 json.dumps(char.get("attitudes", {}), ensure_ascii=False),
+                 char.get("backstory", ""),
+                 char.get("initial_location", ""), char.get("initial_state", ""),
+                 accent, i, row["character_id"]),
+            )
+        else:
+            accent = char.get("accent_color", "") or _pick_accent_color(char["name"], assigned)
+            assigned.add(accent)
+            char_id = f"char_{uuid4().hex[:8]}"
+            await conn.execute(
+                "INSERT INTO world_characters (character_id, world_id, name, identity, "
+                "personality, speech_style, goal, attitudes, backstory, initial_location, "
+                "initial_state, accent_color, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (char_id, world_id, char["name"], char.get("identity", ""),
+                 char.get("personality", ""), char.get("speech_style", ""),
+                 char.get("goal", ""),
+                 json.dumps(char.get("attitudes", {}), ensure_ascii=False),
+                 char.get("backstory", ""),
+                 char.get("initial_location", ""), char.get("initial_state", ""),
+                 accent, i),
+            )
+
+    for r in existing_rows:
+        if r["character_id"] in matched_ids:
+            continue
         await conn.execute(
-            "INSERT INTO world_characters (character_id, world_id, name, identity, "
-            "personality, speech_style, goal, attitudes, backstory, initial_location, "
-            "initial_state, accent_color, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (char_id, world_id,
-             char["name"], char.get("identity", ""), char.get("personality", ""),
-             char.get("speech_style", ""), char.get("goal", ""),
-             json.dumps(char.get("attitudes", {}), ensure_ascii=False),
-             char.get("backstory", ""),
-             char.get("initial_location", ""), char.get("initial_state", ""),
-             accent, i),
+            "DELETE FROM world_characters WHERE character_id = ?",
+            (r["character_id"],),
         )
     await conn.commit()
     return True

@@ -140,3 +140,85 @@ class TestWorlds:
         colors = [r["accent_color"] for r in rows]
         assert len(colors) == 10
         assert len(set(colors)) == 10
+
+    def test_update_world_preserves_character_id(self):
+        from server.storage.sqlite_client import (
+            upsert_user, create_world, update_world, get_world_characters,
+        )
+        asyncio.run(upsert_user("preserve"))
+        wid = asyncio.run(create_world(
+            "preserve", "保id世界", "描述", "", [],
+            {"content": "", "time": ""},
+            make_characters(3),
+        ))
+        before = {r["name"]: r["character_id"] for r in asyncio.run(get_world_characters(wid))}
+
+        chars = make_characters(3)
+        chars[0]["personality"] = "改过的性格"
+        chars[2] = {"name": "新角色", "identity": "测试身份"}  # 角色3 → 新角色
+        changed = asyncio.run(update_world(
+            wid, "preserve", "保id世界", "描述", "", [],
+            {"content": "", "time": ""},
+            chars,
+        ))
+        assert changed is True
+
+        after = {r["name"]: r["character_id"] for r in asyncio.run(get_world_characters(wid))}
+        assert after["角色1"] == before["角色1"]      # 同名保留 id
+        assert after["角色2"] == before["角色2"]
+        assert "角色3" not in after and "新角色" in after
+        rows = asyncio.run(get_world_characters(wid))
+        p = next(r for r in rows if r["name"] == "角色1")
+        assert p["personality"] == "改过的性格"        # 属性已更新
+
+    def test_update_world_remove_unimported_character_ok(self):
+        from server.storage.sqlite_client import (
+            upsert_user, create_world, update_world, get_world_characters,
+        )
+        asyncio.run(upsert_user("remove_ok"))
+        wid = asyncio.run(create_world(
+            "remove_ok", "换血世界", "描述", "", [],
+            {"content": "", "time": ""},
+            make_characters(3),
+        ))
+        changed = asyncio.run(update_world(
+            wid, "remove_ok", "换血世界", "描述", "", [],
+            {"content": "", "time": ""},
+            [{"name": "甲", "identity": ""}, {"name": "乙", "identity": ""},
+             {"name": "丙", "identity": ""}],
+        ))
+        assert changed is True
+        names = {r["name"] for r in asyncio.run(get_world_characters(wid))}
+        assert names == {"甲", "乙", "丙"}
+
+    def test_update_world_heals_unreferenced_duplicate(self):
+        """历史重名（未导入）经编辑去重后多余行被删除——行级匹配治愈路径。"""
+        from server.storage.sqlite_client import (
+            upsert_user, create_world, update_world, get_world_characters, get_db,
+        )
+        asyncio.run(upsert_user("heal"))
+        wid = asyncio.run(create_world(
+            "heal", "重名世界", "描述", "", [],
+            {"content": "", "time": ""},
+            make_characters(3),
+        ))
+
+        async def _dup():
+            db = await get_db()
+            await db.execute(
+                "INSERT INTO world_characters (character_id, world_id, name, sort_order) "
+                "VALUES ('char_dup0001', ?, '角色3', 9)", (wid,))
+            await db.commit()
+        asyncio.run(_dup())   # 库内现在有 4 行，其中两条"角色3"
+
+        chars = [{"name": "角色1", "identity": ""}, {"name": "角色2", "identity": ""},
+                 {"name": "角色3", "identity": ""}, {"name": "角色4", "identity": ""}]
+        changed = asyncio.run(update_world(
+            wid, "heal", "重名世界", "描述", "", [],
+            {"content": "", "time": ""},
+            chars,
+        ))
+        assert changed is True
+        rows = asyncio.run(get_world_characters(wid))
+        assert len(rows) == 4
+        assert len({r["name"] for r in rows}) == 4   # 重名已被治愈
