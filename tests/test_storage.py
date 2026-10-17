@@ -222,3 +222,145 @@ class TestWorlds:
         rows = asyncio.run(get_world_characters(wid))
         assert len(rows) == 4
         assert len({r["name"] for r in rows}) == 4   # 重名已被治愈
+
+    def _make_world_with_imported_character(self, user: str):
+        """创建 3 人世界并直插一条 novel_characters 引用角色1，返回 (wid, 被引用行)。"""
+        from server.storage.sqlite_client import (
+            upsert_user, create_world, get_world_characters, get_db,
+        )
+        from uuid import uuid4
+        asyncio.run(upsert_user(user))
+        wid = asyncio.run(create_world(
+            user, "守卫世界", "描述", "", [],
+            {"content": "", "time": ""},
+            make_characters(3),
+        ))
+        chars = asyncio.run(get_world_characters(wid))
+        target = next(r for r in chars if r["name"] == "角色1")
+
+        async def _import():
+            db = await get_db()
+            from server.storage.sqlite_client import now_ms
+            now = now_ms()
+            eid = f"sess_{uuid4().hex[:8]}"
+            nid = f"novel_{uuid4().hex[:8]}"
+            await db.execute(
+                "INSERT INTO world_evolutions (evolution_id, user_id, world_id, status, "
+                "current_round, created_at) VALUES (?, ?, ?, 'idle', 0, ?)",
+                (eid, user, wid, now))
+            await db.execute(
+                "INSERT INTO novels (novel_id, user_id, world_id, evolution_id, title, "
+                "content, world_snapshot, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (nid, user, wid, eid, "t", "", "{}", now))
+            await db.execute(
+                "INSERT INTO novel_characters (character_id, novel_id, user_id, "
+                "source_character_id, character_snapshot, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (f"nc_{uuid4().hex[:8]}", nid, user, target["character_id"], "{}", now))
+            await db.commit()
+        asyncio.run(_import())
+        return wid, chars
+
+    def test_update_world_remove_imported_character_rejected(self):
+        from server.storage.sqlite_client import update_world
+        wid, chars = self._make_world_with_imported_character("guard_del")
+        new_chars = [c for c in make_characters(3) if c["name"] != "角色1"]
+        new_chars.append({"name": "替补", "identity": ""})
+        with pytest.raises(ValueError, match="角色1"):
+            asyncio.run(update_world(
+                wid, "guard_del", "守卫世界", "描述", "", [],
+                {"content": "", "time": ""},
+                new_chars,
+            ))
+
+    def test_update_world_rename_imported_character_rejected(self):
+        from server.storage.sqlite_client import update_world
+        wid, _ = self._make_world_with_imported_character("guard_ren")
+        chars = make_characters(3)
+        chars[0] = {"name": "改名了", "identity": ""}   # 角色1 被重命名 → 旧名进删除路径
+        with pytest.raises(ValueError, match="角色1"):
+            asyncio.run(update_world(
+                wid, "guard_ren", "守卫世界", "描述", "", [],
+                {"content": "", "time": ""},
+                chars,
+            ))
+
+    def test_update_world_remove_soft_deleted_import_rejected(self):
+        """软删除的导入引用仍锁定世界角色——守卫必须全量计数（P2-1 回归用例）。"""
+        from server.storage.sqlite_client import (
+            update_world, get_world_characters, get_db,
+        )
+        wid, chars = self._make_world_with_imported_character("guard_soft")
+
+        async def _soft_delete():
+            db = await get_db()
+            await db.execute("UPDATE novel_characters SET is_deleted = 1")
+            await db.commit()
+        asyncio.run(_soft_delete())
+
+        new_chars = [c for c in make_characters(3) if c["name"] != "角色1"]
+        new_chars.append({"name": "替补", "identity": ""})
+        with pytest.raises(ValueError, match="角色1"):
+            asyncio.run(update_world(
+                wid, "guard_soft", "守卫世界", "描述", "", [],
+                {"content": "", "time": ""},
+                new_chars,
+            ))
+
+    def test_update_world_duplicate_names_in_request_rejected(self):
+        from server.storage.sqlite_client import upsert_user, create_world, update_world
+        asyncio.run(upsert_user("guard_dup"))
+        wid = asyncio.run(create_world(
+            "guard_dup", "重名请求", "描述", "", [],
+            {"content": "", "time": ""},
+            make_characters(3),
+        ))
+        with pytest.raises(ValueError, match="重复"):
+            asyncio.run(update_world(
+                wid, "guard_dup", "重名请求", "描述", "", [],
+                {"content": "", "time": ""},
+                [{"name": "同名", "identity": ""}, {"name": "同名", "identity": ""},
+                 {"name": "角色3", "identity": ""}],
+            ))
+
+    def test_update_world_locked_duplicate_rejected(self):
+        """历史重名的多余行已被导入 → 编辑被守卫拒绝。"""
+        from server.storage.sqlite_client import (
+            update_world, get_world_characters, get_db,
+        )
+        from uuid import uuid4
+        wid, chars = self._make_world_with_imported_character("guard_lock")
+        # 给"角色2"也插一条导入引用，然后把请求改为令"角色2"消失（进删除路径）
+        row2 = next(r for r in chars if r["name"] == "角色2")
+
+        async def _import2():
+            db = await get_db()
+            from server.storage.sqlite_client import now_ms
+            now = now_ms()
+            eid = f"sess_{uuid4().hex[:8]}"
+            nid = f"novel_{uuid4().hex[:8]}"
+            await db.execute(
+                "INSERT INTO world_evolutions (evolution_id, user_id, world_id, status, "
+                "current_round, created_at) VALUES (?, ?, ?, 'idle', 0, ?)",
+                (eid, "guard_lock", wid, now))
+            await db.execute(
+                "INSERT INTO novels (novel_id, user_id, world_id, evolution_id, title, "
+                "content, world_snapshot, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (nid, "guard_lock", wid, eid, "t", "", "{}", now))
+            await db.execute(
+                "INSERT INTO novel_characters (character_id, novel_id, user_id, "
+                "source_character_id, character_snapshot, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (f"nc_{uuid4().hex[:8]}", nid, "guard_lock", row2["character_id"], "{}", now))
+            await db.commit()
+        asyncio.run(_import2())
+
+        new_chars = [{"name": "角色1", "identity": ""},
+                     {"name": "角色3", "identity": ""},
+                     {"name": "替补", "identity": ""}]
+        with pytest.raises(ValueError, match="角色2"):
+            asyncio.run(update_world(
+                wid, "guard_lock", "守卫世界", "描述", "", [],
+                {"content": "", "time": ""},
+                new_chars,
+            ))

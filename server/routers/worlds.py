@@ -40,24 +40,30 @@ async def get_worlds(user_id: str = Query(...)):
 @router.post("/create", response_model=CreateWorldResponse, status_code=201)
 async def post_world(req: CreateWorldRequest):
     logger.info("创建世界 user=%s name=%s chars=%d", req.user_id, req.name, len(req.characters))
-    wid = await create_world(
-        user_id=req.user_id, name=req.name, description=req.description,
-        world_history=req.world_history,
-        rules=req.rules, initial_event=req.initial_event,
-        characters=[c.model_dump() for c in req.characters],
-    )
+    try:
+        wid = await create_world(
+            user_id=req.user_id, name=req.name, description=req.description,
+            world_history=req.world_history,
+            rules=req.rules, initial_event=req.initial_event,
+            characters=[c.model_dump() for c in req.characters],
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return CreateWorldResponse(world_id=wid)
 
 
 @router.post("/update")
 async def put_world(req: UpdateWorldRequest):
     logger.info("更新世界 world_id=%s user=%s name=%s", req.world_id, req.user_id, req.name)
-    success = await update_world(
-        world_id=req.world_id, user_id=req.user_id, name=req.name,
-        description=req.description, world_history=req.world_history,
-        rules=req.rules, initial_event=req.initial_event,
-        characters=[c.model_dump() for c in req.characters],
-    )
+    try:
+        success = await update_world(
+            world_id=req.world_id, user_id=req.user_id, name=req.name,
+            description=req.description, world_history=req.world_history,
+            rules=req.rules, initial_event=req.initial_event,
+            characters=[c.model_dump() for c in req.characters],
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     if not success:
         raise HTTPException(404, "世界不存在或无权修改")
     return {"status": "updated", "world_id": req.world_id}

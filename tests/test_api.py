@@ -152,3 +152,50 @@ class TestWorlds:
         assert res2.status_code == 422
         res3 = client.post("/api/worlds/update", json={**base, "characters": make_characters(10)})
         assert res3.status_code == 200
+
+    def test_update_world_remove_imported_character_400(self, client):
+        import asyncio
+        from uuid import uuid4
+        from server.storage.sqlite_client import get_db, now_ms
+
+        uid = _login(client, "guard_api")
+        res = client.post("/api/worlds/create", json={
+            "user_id": uid, "name": "守卫接口", "description": "",
+            "world_history": "", "rules": [],
+            "initial_event": {"content": "", "time": ""},
+            "characters": make_characters(3),
+        })
+        wid = res.json()["world_id"]
+        chars = client.get(f"/api/worlds/detail?world_id={wid}").json()["characters"]
+
+        async def _import():
+            db = await get_db()
+            eid = f"sess_{uuid4().hex[:8]}"
+            nid = f"novel_{uuid4().hex[:8]}"
+            now = now_ms()
+            await db.execute(
+                "INSERT INTO world_evolutions (evolution_id, user_id, world_id, status, "
+                "current_round, created_at) VALUES (?, ?, ?, 'idle', 0, ?)",
+                (eid, uid, wid, now))
+            await db.execute(
+                "INSERT INTO novels (novel_id, user_id, world_id, evolution_id, title, "
+                "content, world_snapshot, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (nid, uid, wid, eid, "t", "", "{}", now))
+            await db.execute(
+                "INSERT INTO novel_characters (character_id, novel_id, user_id, "
+                "source_character_id, character_snapshot, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (f"nc_{uuid4().hex[:8]}", nid, uid, chars[0]["character_id"], "{}", now))
+            await db.commit()
+        asyncio.run(_import())
+
+        new_chars = [c for c in make_characters(3) if c["name"] != "角色1"]
+        new_chars.append({"name": "替补", "identity": ""})
+        res2 = client.post("/api/worlds/update", json={
+            "user_id": uid, "world_id": wid, "name": "守卫接口", "description": "",
+            "world_history": "", "rules": [],
+            "initial_event": {"content": "", "time": ""},
+            "characters": new_chars,
+        })
+        assert res2.status_code == 400
+        assert "角色1" in res2.json()["detail"]

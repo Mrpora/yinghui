@@ -339,6 +339,9 @@ async def update_world(world_id: str, user_id: str, name: str, description: str,
     """
     if len(characters) < 3 or len(characters) > 10:
         raise ValueError("角色数量必须在 3-10 之间")
+    names = [c["name"] for c in characters]
+    if len(names) != len(set(names)):
+        raise ValueError("角色名重复：请为每个角色使用不同的名字")
     from uuid import uuid4
     conn = await get_db()
     now = now_ms()
@@ -401,6 +404,17 @@ async def update_world(world_id: str, user_id: str, name: str, description: str,
     for r in existing_rows:
         if r["character_id"] in matched_ids:
             continue
+        cursor = await conn.execute(
+            "SELECT COUNT(*) FROM novel_characters WHERE source_character_id = ?",
+            (r["character_id"],),
+        )   # 全量计数不过滤 is_deleted——对话系统"移除角色"是软删除，行仍在、FK 照样拦截
+        referenced = (await cursor.fetchone())[0]
+        if referenced > 0:
+            await conn.rollback()
+            raise ValueError(
+                f"角色「{r['name']}」已被导入过对话系统，暂不支持移除或重命名"
+                "（其导入记录与对话历史仍引用该角色）"
+            )
         await conn.execute(
             "DELETE FROM world_characters WHERE character_id = ?",
             (r["character_id"],),
