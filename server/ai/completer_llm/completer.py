@@ -41,6 +41,7 @@ def _build_user_prompt(world_data: dict, character_count: int) -> str:
     parts = []
     world_name = world_data.get("name", "") or world_data.get("world_name", "")
     world_description = world_data.get("description", "") or world_data.get("world_description", "")
+    parts.append(f"目标角色数量：{character_count} 人（输出 characters 数组必须恰好包含 {character_count} 个角色）")
     parts.append(f"世界名称：{world_name}")
     parts.append(f"世界描述：{world_description}")
 
@@ -108,6 +109,8 @@ async def smart_complete_world(
             "initial_event": world_data.get("initial_event"),
             "characters": world_data.get("characters", [])[:character_count],
         }
+
+    system_prompt = system_prompt.replace("{character_count}", str(character_count))
 
     user_prompt = _build_user_prompt(world_data, character_count)
     world_name = world_data.get("name", "") or world_data.get("world_name", "")

@@ -82,7 +82,7 @@ async def complete_config(req: CompleteConfigRequest):
             "initial_event": req.initial_event,
             "characters": [c.model_dump() for c in req.characters],
         },
-        character_count=3,
+        character_count=min(10, max(3, len(req.characters))),
     )
     return CompleteConfigResponse(**result)
 

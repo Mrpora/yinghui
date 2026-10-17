@@ -199,3 +199,20 @@ class TestWorlds:
         })
         assert res2.status_code == 400
         assert "角色1" in res2.json()["detail"]
+
+    def test_complete_config_clamps_character_count(self, client, monkeypatch):
+        import server.ai.completer_llm.completer as comp
+        captured = {}
+
+        async def fake_smart(world_data, character_count=3):
+            captured["n"] = character_count
+            return {"world_history": "", "rules": [], "initial_event": None,
+                    "characters": []}
+
+        monkeypatch.setattr(comp, "smart_complete_world", fake_smart)
+        res = client.post("/api/worlds/complete-config", json={
+            "world_name": "测试", "world_description": "描述",
+            "characters": [{"name": f"a{i}", "identity": ""} for i in range(20)],
+        })
+        assert res.status_code == 200
+        assert captured["n"] == 10    # min(10, max(3, 20))
