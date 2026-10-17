@@ -27,7 +27,8 @@ const initialEventContent = ref('')
 const initialEventTime = ref('')
 
 // ── 角色 ──
-const characterCount = 3
+const MIN_CHARACTERS = 3
+const MAX_CHARACTERS = 10
 
 function emptyCharacter(): CharacterConfig {
   return {
@@ -36,9 +37,9 @@ function emptyCharacter(): CharacterConfig {
   }
 }
 
-const characters = ref<CharacterConfig[]>([
-  emptyCharacter(), emptyCharacter(), emptyCharacter(),
-])
+const characters = ref<CharacterConfig[]>(
+  Array.from({ length: MIN_CHARACTERS }, () => emptyCharacter()),
+)
 
 // ── 态度文本 ↔ Record 互转 ──
 function attitudesToText(a: Record<string, string>): string {
@@ -59,7 +60,7 @@ function textToAttitudes(text: string): Record<string, string> {
 }
 
 // 角色态度文本（独立于 CharacterConfig.attitudes，方便编辑）
-const attitudesTexts = ref<string[]>(['', '', ''])
+const attitudesTexts = ref<string[]>(Array.from({ length: MIN_CHARACTERS }, () => ''))
 
 onMounted(() => {
   if (!user.isLoggedIn) {
@@ -79,6 +80,18 @@ function goBack() {
 const isCompleting = ref(false)
 const completeError = ref('')
 
+function addCharacter() {
+  if (characters.value.length >= MAX_CHARACTERS) return
+  characters.value.push(emptyCharacter())
+  attitudesTexts.value.push('')
+}
+
+function removeCharacter(i: number) {
+  if (characters.value.length <= MIN_CHARACTERS) return
+  characters.value.splice(i, 1)
+  attitudesTexts.value.splice(i, 1)
+}
+
 async function aiComplete() {
   completeError.value = ''
   isCompleting.value = true
@@ -96,11 +109,13 @@ async function aiComplete() {
     initialEventTime.value = res.initial_event?.time || ''
 
     const chs = res.characters || []
-    characters.value = chs.slice(0, characterCount).map((ch) => ({
-      ...emptyCharacter(),
-      ...ch,
-    }))
-    attitudesTexts.value = chs.map((ch) => attitudesToText(ch.attitudes || {}))
+    const incoming = chs.slice(0, MAX_CHARACTERS)
+    characters.value = incoming.map((ch) => ({ ...emptyCharacter(), ...ch }))
+    attitudesTexts.value = incoming.map((ch) => attitudesToText(ch.attitudes || {}))
+    while (characters.value.length < MIN_CHARACTERS) {
+      characters.value.push(emptyCharacter())
+      attitudesTexts.value.push('')
+    }
   } catch (e: unknown) {
     completeError.value = (e as Error).message || 'AI 补全失败，请重试'
   } finally {
@@ -113,7 +128,7 @@ const canSubmit = computed(() => {
   if (!name.value.trim() || !description.value.trim()) return false
   if (!worldHistory.value.trim()) return false
   const validChars = characters.value.filter(c => c.name.trim())
-  if (validChars.length < 3) return false
+  if (validChars.length < MIN_CHARACTERS || validChars.length > MAX_CHARACTERS) return false
   if (validChars.some(c => !c.backstory?.trim())) return false
   return true
 })
@@ -132,9 +147,14 @@ async function handleCreate() {
     submitError.value = '请填写世界历史'
     return
   }
+  const unnamed = characters.value.findIndex((c) => !c.name.trim())
+  if (unnamed !== -1) {
+    submitError.value = `角色 ${unnamed + 1} 未填写名称`
+    return
+  }
   const validChars = characters.value.filter(c => c.name.trim())
-  if (validChars.length < 3) {
-    submitError.value = '请填写全部 3 个角色的名称'
+  if (validChars.length < MIN_CHARACTERS) {
+    submitError.value = `至少需要 ${MIN_CHARACTERS} 个角色（当前已填 ${validChars.length} 个）`
     return
   }
   const emptyBackstories = validChars.filter(c => !c.backstory?.trim())
@@ -157,10 +177,13 @@ async function handleCreate() {
         content: initialEventContent.value.trim(),
         time: initialEventTime.value.trim(),
       },
-      characters: characters.value.map((ch, i) => ({
-        ...ch,
-        attitudes: textToAttitudes(attitudesTexts.value[i] || ''),
-      })),
+      characters: characters.value
+        .map((ch, i) => ({ ch, i }))
+        .filter(({ ch }) => ch.name.trim())
+        .map(({ ch, i }) => ({
+          ...ch,
+          attitudes: textToAttitudes(attitudesTexts.value[i] || ''),
+        })),
     })
     await router.push('/worlds')
   } catch (e: unknown) {
@@ -283,15 +306,38 @@ async function handleCreate() {
 
       <!-- ═══ 角色设定 ═══ -->
       <section>
-        <h2 class="text-sm text-smoke tracking-widest mb-3 border-b border-border-light pb-1">角色设定</h2>
+        <div class="flex items-center justify-between mb-3 border-b border-border-light pb-1">
+          <h2 class="text-sm text-smoke tracking-widest">角色设定</h2>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-smoke">{{ characters.length }} / {{ MAX_CHARACTERS }}</span>
+            <button
+              class="text-xs text-old-gold border border-old-gold/30 rounded px-2 py-0.5 hover:bg-old-gold hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              :disabled="characters.length >= MAX_CHARACTERS"
+              title="最多 10 个角色"
+              @click="addCharacter"
+            >
+              ＋ 添加角色
+            </button>
+          </div>
+        </div>
 
-        <div class="grid grid-cols-3 gap-6">
+        <div class="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           <div
             v-for="(ch, i) in characters"
             :key="i"
             class="bg-white rounded-xl border border-border-light p-5 space-y-3"
           >
-            <p class="text-xs text-old-gold tracking-widest">角色 {{ i + 1 }}</p>
+            <p class="text-xs text-old-gold tracking-widest flex items-center justify-between">
+              <span>角色 {{ i + 1 }}</span>
+              <button
+                v-if="characters.length > MIN_CHARACTERS"
+                class="text-cinnabar/60 hover:text-cinnabar text-xs"
+                title="删除该角色"
+                @click="removeCharacter(i)"
+              >
+                删除
+              </button>
+            </p>
 
             <div class="grid grid-cols-2 gap-3">
               <div>
