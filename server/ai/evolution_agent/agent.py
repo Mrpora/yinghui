@@ -193,9 +193,9 @@ class PipelineOrchestrator:
             "data": {"round": round_num, "max_rounds": session.max_rounds},
         })
 
-        await self._maybe_compact_director_context(session)
-
         try:
+            await self._maybe_compact_director_context(session)
+
             if round_num == 1:
                 ie = session.world_config.initial_event
                 initial_text = f"{ie.content}（{ie.time}）"

@@ -344,7 +344,6 @@ async def update_world(world_id: str, user_id: str, name: str, description: str,
         raise ValueError("角色名重复：请为每个角色使用不同的名字")
     from uuid import uuid4
     conn = await get_db()
-    now = now_ms()
     cursor = await conn.execute(
         "UPDATE worlds SET name = ?, description = ?, world_history = ?, "
         "rules = ?, initial_event = ? WHERE world_id = ? AND user_id = ? "
@@ -363,7 +362,7 @@ async def update_world(world_id: str, user_id: str, name: str, description: str,
     for r in existing_rows:
         rows_by_name.setdefault(r["name"], []).append(r)
 
-    assigned: set[str] = set()
+    assigned: set[str] = {r["accent_color"] for r in existing_rows}
     matched_ids: set[str] = set()
 
     for i, char in enumerate(characters):
