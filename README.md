@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/python-3.11+-green.svg)](https://www.python.org/)
 [![Node](https://img.shields.io/badge/node-20+-green.svg)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/docker-supported-blue.svg)](docker-compose.yml)
-[![Tests](https://img.shields.io/badge/tests-98_passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-120_passed-brightgreen.svg)](tests/)
 [![Stars](https://img.shields.io/github/stars/mrpora/yinghui?style=social)](https://github.com/mrpora/yinghui)
 
 ![世界演化 Demo](docs/gifs/demoC-2.gif)
@@ -66,7 +66,7 @@ Demo 视频完整展示了 C 线（世界演化）和 A 线（角色对话）的
 
 | 功能 | 说明 | Demo |
 |------|------|------|
-| **世界创建** | 设定世界规则、角色身份/性格/目标/关系，AI 自动补全未尽细节 | C-1 |
+| **世界创建** | 设定世界规则、角色身份/性格/目标/关系（3-10 个角色），AI 自动补全未尽细节 | C-1 |
 | **世界自主演化** | 导演 Agent 分回合调度角色 Agent，每轮产出新事件和关系变化 | C-2 |
 | **角色互动** | 角色基于自身设定自主决策、对话、行动，无需人工编写剧本 | C-2 |
 | **角色冲突** | 角色间因目标或立场对立产生冲突，自主推进冲突升级或化解 | C-3 |
@@ -190,7 +190,7 @@ yinghui/
 ├── data/                     # SQLite 数据库 + 工作目录
 ├── models/                   # 本地嵌入模型
 ├── docs/                     # Demo 视频与素材
-├── tests/                    # 98 个后端测试（pytest）
+├── tests/                    # 120 个后端测试（pytest）
 └── .env.example              # 环境变量模板
 ```
 
@@ -218,6 +218,8 @@ yinghui/
 | `EVOLUTION_CHARACTER_MODEL` | 角色模型 | `deepseek-v4-flash` |
 | `EVOLUTION_DEFAULT_ROUNDS` | 默认演化轮数 | `20` |
 | `EVOLUTION_MAX_LOOPS` | 最大循环次数 | `30` |
+| `EVOLUTION_MAX_ROUNDS` | 演化轮数上限（默认轮数按角色数正比缩放后封顶） | `100` |
+| `EVOLUTION_COMPACT_THRESHOLD_CHARS` | 导演上下文压缩触发阈值（字符） | `400000` |
 
 </details>
 
@@ -291,7 +293,7 @@ yinghui/
 ### 运行测试
 
 ```bash
-# 全部测试（98 个）
+# 全部测试（120 个）
 pytest tests/ -v
 
 # 按模块运行
