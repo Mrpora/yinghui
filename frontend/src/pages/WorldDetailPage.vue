@@ -153,8 +153,16 @@ async function handleSave() {
         .map((ch, i) => ({ ch, i }))
         .filter(({ ch }) => ch.name.trim())
         .map(({ ch, i }) => ({
-          ...ch,
+          name: ch.name,
+          identity: ch.identity ?? '',
+          personality: ch.personality ?? '',
+          speech_style: ch.speech_style ?? '',
+          goal: ch.goal ?? '',
           attitudes: textToAttitudes(attitudesTexts.value[i] || ''),
+          backstory: ch.backstory ?? '',
+          initial_location: ch.initial_location ?? '',
+          initial_state: ch.initial_state ?? '',
+          accent_color: ch.accent_color ?? '',
         })),
     })
     isEditing.value = false
