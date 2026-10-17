@@ -105,3 +105,50 @@ class TestWorlds:
         wid = res.json()["world_id"]
         res2 = client.post(f"/api/worlds/delete?world_id={wid}&user_id=bob")
         assert res2.status_code == 404
+
+    def test_create_world_min_characters_rejected(self, client):
+        uid = _login(client, "min_char_user")
+        res = client.post("/api/worlds/create", json={
+            "user_id": uid, "name": "两人世界", "description": "",
+            "world_history": "", "rules": [],
+            "initial_event": {"content": "", "time": ""},
+            "characters": make_characters(2),
+        })
+        assert res.status_code == 422
+
+    def test_create_world_max_characters(self, client):
+        uid = _login(client, "max_char_user")
+        res = client.post("/api/worlds/create", json={
+            "user_id": uid, "name": "十人世界", "description": "",
+            "world_history": "", "rules": [],
+            "initial_event": {"content": "", "time": ""},
+            "characters": make_characters(10),
+        })
+        assert res.status_code == 201
+
+        res2 = client.post("/api/worlds/create", json={
+            "user_id": uid, "name": "十一人世界", "description": "",
+            "world_history": "", "rules": [],
+            "initial_event": {"content": "", "time": ""},
+            "characters": make_characters(11),
+        })
+        assert res2.status_code == 422
+
+    def test_update_world_character_bounds(self, client):
+        uid = _login(client, "bounds_user")
+        res = client.post("/api/worlds/create", json={
+            "user_id": uid, "name": "边界世界", "description": "",
+            "world_history": "", "rules": [],
+            "initial_event": {"content": "", "time": ""},
+            "characters": make_characters(3),
+        })
+        wid = res.json()["world_id"]
+        base = {
+            "user_id": uid, "world_id": wid, "name": "边界世界", "description": "",
+            "world_history": "", "rules": [],
+            "initial_event": {"content": "", "time": ""},
+        }
+        res2 = client.post("/api/worlds/update", json={**base, "characters": make_characters(2)})
+        assert res2.status_code == 422
+        res3 = client.post("/api/worlds/update", json={**base, "characters": make_characters(10)})
+        assert res3.status_code == 200

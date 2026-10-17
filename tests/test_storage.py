@@ -108,3 +108,19 @@ class TestWorlds:
         ))
         assert asyncio.run(soft_delete_world(wid, "bob")) is False
         assert asyncio.run(get_world(wid)) is not None
+
+    def test_create_world_character_bounds(self):
+        from server.storage.sqlite_client import upsert_user, create_world
+        asyncio.run(upsert_user("bounds"))
+        with pytest.raises(ValueError, match="3-10"):
+            asyncio.run(create_world(
+                "bounds", "两人", "", "", [],
+                {"content": "", "time": ""},
+                [{"name": "角色1", "identity": ""}, {"name": "角色2", "identity": ""}],
+            ))
+        with pytest.raises(ValueError, match="3-10"):
+            asyncio.run(create_world(
+                "bounds", "十一人", "", "", [],
+                {"content": "", "time": ""},
+                [{"name": f"角色{i}", "identity": ""} for i in range(1, 12)],
+            ))

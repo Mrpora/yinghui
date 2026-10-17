@@ -276,8 +276,8 @@ async def get_world_characters(world_id: str) -> list[dict]:
 
 async def create_world(user_id: str, name: str, description: str, world_history: str,
                         rules: list[str], initial_event: dict, characters: list[dict]) -> str:
-    if len(characters) < 1 or len(characters) > 3:
-        raise ValueError("角色数量必须在 1-3 之间")
+    if len(characters) < 3 or len(characters) > 10:
+        raise ValueError("角色数量必须在 3-10 之间")
     from uuid import uuid4
     conn = await get_db()
     world_id = f"world_{uuid4().hex[:8]}"
@@ -322,8 +322,8 @@ async def update_world(world_id: str, user_id: str, name: str, description: str,
                        world_history: str, rules: list[str], initial_event: dict,
                        characters: list[dict]) -> bool:
     """更新世界及角色数据。先删旧角色再写新角色，在一个事务内完成。"""
-    if len(characters) < 1 or len(characters) > 3:
-        raise ValueError("角色数量必须在 1-3 之间")
+    if len(characters) < 3 or len(characters) > 10:
+        raise ValueError("角色数量必须在 3-10 之间")
     from uuid import uuid4
     conn = await get_db()
     now = now_ms()

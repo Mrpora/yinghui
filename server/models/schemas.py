@@ -64,7 +64,7 @@ class CreateWorldRequest(BaseModel):
     world_history: str = ""
     rules: list[str] = Field(default_factory=list)
     initial_event: dict = Field(default_factory=dict)
-    characters: list[CharacterCreate] = Field(min_length=1, max_length=3)
+    characters: list[CharacterCreate] = Field(min_length=3, max_length=10)
 
 
 class CreateWorldResponse(BaseModel):
@@ -81,7 +81,7 @@ class UpdateWorldRequest(BaseModel):
     world_history: str = ""
     rules: list[str] = Field(default_factory=list)
     initial_event: dict = Field(default_factory=dict)
-    characters: list[CharacterCreate] = Field(min_length=1, max_length=3)
+    characters: list[CharacterCreate] = Field(min_length=3, max_length=10)
 
 
 class WorldItem(BaseModel):
