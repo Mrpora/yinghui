@@ -133,3 +133,16 @@ class TestConfigDefaults:
         assert c.EVOLUTION_DEFAULT_ROUNDS == 10
         assert c.CHAT_TEMPERATURE == 0.9
         assert c.MEMORY_LIMIT == 5
+
+    def test_config_max_rounds(self, monkeypatch):
+        monkeypatch.setenv("LLM_API_KEY", "sk-test")
+        from importlib import reload
+        import server.config
+        reload(server.config)
+        c = server.config.Config()
+        assert c.EVOLUTION_MAX_ROUNDS == 100
+
+        monkeypatch.setenv("EVOLUTION_MAX_ROUNDS", "30")
+        reload(server.config)
+        c = server.config.Config()
+        assert c.EVOLUTION_MAX_ROUNDS == 30

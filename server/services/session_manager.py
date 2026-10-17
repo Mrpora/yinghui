@@ -279,6 +279,12 @@ class SessionManager:
 
         character_names = [cr["name"] for cr in char_rows]
 
+        # 演化轮数与角色数正比：3 人 20 轮基准，封顶 EVOLUTION_MAX_ROUNDS
+        max_rounds = min(
+            config.EVOLUTION_MAX_ROUNDS,
+            round(config.EVOLUTION_DEFAULT_ROUNDS * len(char_rows) / 3),
+        )
+
         # 从 world_characters.attitudes 初始化角色关系
         initial_relationships: dict[str, dict[str, str]] = {}
         for char in wc.characters:
@@ -309,7 +315,7 @@ class SessionManager:
                 world_id,
                 SessionStatus.IDLE.value,
                 0,
-                config.EVOLUTION_DEFAULT_ROUNDS,
+                max_rounds,
                 0,
                 json.dumps(director_ctx, ensure_ascii=False),
                 json.dumps(char_ctxs, ensure_ascii=False),
@@ -323,7 +329,7 @@ class SessionManager:
 
         logger.info(
             "📦 会话创建 session=%s user=%s world=%s chars=%d rounds=%d",
-            sid, user_id, world_id, len(char_rows), config.EVOLUTION_DEFAULT_ROUNDS,
+            sid, user_id, world_id, len(char_rows), max_rounds,
         )
         return Session(
             id=sid,
@@ -331,7 +337,7 @@ class SessionManager:
             world_id=world_id,
             status=SessionStatus.IDLE,
             current_round=0,
-            max_rounds=config.EVOLUTION_DEFAULT_ROUNDS,
+            max_rounds=max_rounds,
             world_config=wc,
             created_at=now,
             director_context=director_ctx,

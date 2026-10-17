@@ -336,3 +336,40 @@ class TestUpdateMeta:
 
         assert loaded.status == SessionStatus.RUNNING
         assert loaded.current_round == 3
+
+
+class TestMaxRoundsScaling:
+    """轮数随角色数正比缩放（决策：角色越多轮次越多，公式 min(EVOLUTION_MAX_ROUNDS, round(20n/3))）。"""
+
+    @pytest.mark.asyncio
+    async def test_max_rounds_scales_with_characters(self):
+        from server.storage.sqlite_client import upsert_user, create_world
+        await upsert_user("scale_user")
+        wid = await create_world(
+            "scale_user", "六人世界", "描述", "历史", ["规则1"],
+            {"content": "开始", "time": "黎明"},
+            [{"name": n, "identity": "测试"} for n in ["甲", "乙", "丙", "丁", "戊", "己"]],
+        )
+        mgr = SessionManager()
+        session = await mgr.create("scale_user", wid)
+        assert session.max_rounds == 40   # round(20 × 6 / 3)
+
+    @pytest.mark.asyncio
+    async def test_max_rounds_capped(self, monkeypatch):
+        import server.config as cfg
+        import server.services.session_manager as sm
+        # 同时补丁当前单例与 session_manager 持有的引用：全量回归时
+        # test_config.py 的 reload 会替换 server.config.config，
+        # 而 session_manager 仍持有最初导入的 Config 对象
+        monkeypatch.setattr(cfg.config, "EVOLUTION_MAX_ROUNDS", 30)
+        monkeypatch.setattr(sm.config, "EVOLUTION_MAX_ROUNDS", 30)
+        from server.storage.sqlite_client import upsert_user, create_world
+        await upsert_user("cap_user")
+        wid = await create_world(
+            "cap_user", "十人封顶", "描述", "历史", ["规则1"],
+            {"content": "开始", "time": "黎明"},
+            [{"name": f"角色{i}", "identity": "测试"} for i in range(1, 11)],
+        )
+        mgr = SessionManager()
+        session = await mgr.create("cap_user", wid)
+        assert session.max_rounds == 30   # round(20×10/3)=67 被 30 封顶
