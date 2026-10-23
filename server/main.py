@@ -13,6 +13,7 @@ from server.logging_config import setup_logging
 from server.storage.sqlite_client import init_db
 from server.prompt_loader import preload_all
 from server.routers import auth, worlds, evolutions, novels, chats, memories, settings
+from server.routers import agent_ops
 
 setup_logging(logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ app.include_router(novels.router)
 app.include_router(chats.router)
 app.include_router(memories.router)
 app.include_router(settings.router)
+app.include_router(agent_ops.router)
 
 
 if __name__ == "__main__":
