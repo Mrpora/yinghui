@@ -5,6 +5,10 @@
 
 完全基于 SQLite（world_evolutions 表）实现，替代原 Redis 版本。
 上下文、时间线、关系等均存储为 world_evolutions 表的 JSON 列。
+
+纯领域存储：不构建任何 LLM prompt（编排已外移至 yinghui-dsh-plug 桥接）。
+director_context / character_contexts 列保留为持久化镜像——plug 播种
+DSH 会话的数据源，也是 MCP 写入的落点；create() 不再预置内容。
 """
 import json
 import logging
@@ -16,7 +20,6 @@ from fastapi import HTTPException
 
 from server.config import config
 from server.storage.sqlite_client import get_db, now_ms
-from server.prompt_loader import get_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -120,119 +123,6 @@ async def _get_world_characters(world_id: str) -> list[dict]:
 class SessionManager:
     """管理演化会话的完整生命周期——SQLite 持久化版本。"""
 
-    def __init__(self):
-        self.director_template = get_prompt("evolution_agent/director_system")
-        if not self.director_template:
-            self.director_template = get_prompt("evolution_agent_v2/director_system")
-        self.world_injection_template = get_prompt("evolution_agent_v2/world_injection")
-        self.character_template = get_prompt("evolution_agent/character_system")
-        if not self.character_template:
-            self.character_template = get_prompt("evolution_agent_v2/character_system")
-        if not self.director_template or not self.world_injection_template or not self.character_template:
-            logger.warning(
-                "⚠️ 演化 Agent 提示词未找到: director=%s world_injection=%s character=%s",
-                bool(self.director_template), bool(self.world_injection_template), bool(self.character_template),
-            )
-
-    # ── Prompt 构建 ──
-
-    def _build_director_context(self, wc: WorldConfig) -> list[dict]:
-        world_config_json = json.dumps({
-            "world": {
-                "name": wc.world.name,
-                "description": wc.world.description,
-                "world_history": wc.world.world_history,
-                "rules": wc.world.rules,
-            },
-            "characters": [
-                {
-                    "name": c.name,
-                    "identity": c.identity,
-                    "personality": c.personality,
-                    "speech_style": c.speech_style,
-                    "goal": c.goal,
-                    "attitudes": c.attitudes,
-                    "backstory": c.backstory,
-                    "initial_location": c.initial_location,
-                    "initial_state": c.initial_state,
-                }
-                for c in wc.characters
-            ],
-            "initial_event": {
-                "content": wc.initial_event.content,
-                "time": wc.initial_event.time,
-            },
-        }, ensure_ascii=False, indent=2)
-        prompt = (self.director_template
-                  .replace("{world_name}", wc.world.name)
-                  .replace("{world_config}", world_config_json))
-        return [{"role": "system", "content": prompt}]
-
-    def _build_character_context(self, char: CharacterConfig, wc: WorldConfig) -> list[dict]:
-        knowledge_lines = []
-        for other in wc.characters:
-            if other.name == char.name:
-                continue
-            knowledge_lines.append(f"- {other.name}：{other.identity}，{other.personality}")
-        rules_lines = [f"- {r}" for r in wc.world.rules]
-        attitude_lines = []
-        for target, attitude in char.attitudes.items():
-            attitude_lines.append(f"- 对{target}：{attitude}")
-        prompt = (self.character_template
-                  .replace("{character_name}", char.name)
-                  .replace("{identity}", char.identity)
-                  .replace("{personality}", char.personality)
-                  .replace("{speech_style}", char.speech_style)
-                  .replace("{world_name}", wc.world.name)
-                  .replace("{world_description}", wc.world.description)
-                  .replace("{world_history}", wc.world.world_history)
-                  .replace("{world_rules}", "\n".join(rules_lines))
-                  .replace("{world_knowledge}", "\n".join(knowledge_lines))
-                  .replace("{attitude_block}", "\n".join(attitude_lines))
-                  .replace("{core_goal}", char.goal)
-                  .replace("{backstory}", char.backstory))
-        return [{"role": "system", "content": prompt}]
-
-    def _build_world_config_json(self, wc: WorldConfig) -> str:
-        """将 WorldConfig 序列化为 JSON 字符串（供 world_injection 模板使用）。"""
-        world_config = {
-            "world": {
-                "name": wc.world.name,
-                "description": wc.world.description,
-                "world_history": wc.world.world_history,
-                "rules": wc.world.rules,
-            },
-            "characters": [
-                {
-                    "name": c.name,
-                    "identity": c.identity,
-                    "personality": c.personality,
-                    "speech_style": c.speech_style,
-                    "goal": c.goal,
-                    "attitudes": c.attitudes,
-                    "backstory": c.backstory,
-                    "initial_location": c.initial_location,
-                    "initial_state": c.initial_state,
-                }
-                for c in wc.characters
-            ],
-            "initial_event": {
-                "content": wc.initial_event.content,
-                "time": wc.initial_event.time,
-            },
-        }
-        return json.dumps(world_config, ensure_ascii=False, indent=2)
-
-    def _build_director_system_message(self) -> list[dict]:
-        """构建导演 system message（无占位符，纯行为规范）。"""
-        return [{"role": "system", "content": self.director_template}]
-
-    def _build_world_injection_message(self, wc: WorldConfig) -> str:
-        """构建首条 user message（世界配置注入）。"""
-        template = self.world_injection_template or "{world_config_json}"
-        world_json = self._build_world_config_json(wc)
-        return template.replace("{world_config_json}", world_json)
-
     # ── WorldConfig 构建 ──
 
     def _build_world_config(self, world_row: dict, char_rows: list[dict]) -> WorldConfig:
@@ -265,8 +155,9 @@ class SessionManager:
     async def create(self, user_id: str, world_id: str) -> Session:
         """创建新的演化会话。
 
-        从 worlds/world_characters 读取世界配置，构建导演和角色上下文，
-        写入 world_evolutions 表（SQLite）。
+        从 worlds/world_characters 读取世界配置，写入 world_evolutions 表（SQLite）。
+        director_context / character_contexts 置空（纯领域服务不再预置 prompt 上下文，
+        由桥接进程播种 DSH 会话；MCP 经 get/set_context 读写该持久化镜像）。
         """
         world_row = await _get_world(world_id)
         if world_row is None:
@@ -291,14 +182,9 @@ class SessionManager:
             for target, attitude in char.attitudes.items():
                 initial_relationships.setdefault(char.name, {})[target] = attitude
 
-        # 构建上下文
-        director_ctx = self._build_director_context(wc)
-        char_ctxs = {}
-        for i, cr in enumerate(char_rows):
-            char_config = wc.characters[i]
-            char_name = cr["name"]
-            char_ctx = self._build_character_context(char_config, wc)
-            char_ctxs[char_name] = char_ctx
+        # 上下文列置空（持久化镜像，初始无内容）
+        director_ctx: list[dict] = []
+        char_ctxs: dict[str, list[dict]] = {}
 
         # 写入 world_evolutions 表
         db = await get_db()
@@ -370,8 +256,8 @@ class SessionManager:
         director_ctx = json.loads(meta.get("director_context", "[]"))
         char_ctxs = json.loads(meta.get("character_contexts", "{}"))
 
-        # 从 character_contexts 的 key 推导角色名称列表
-        character_names = list(char_ctxs.keys())
+        # 角色名称来自世界配置（上下文列是持久化镜像，不承载角色清单）
+        character_names = wc.character_names
 
         relationships = json.loads(meta.get("relationships", "{}"))
 

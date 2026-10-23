@@ -333,12 +333,12 @@ class TestCharacterContextAndProfile:
         wid = _create_world(client, uid)
         eid = _create_evolution(client, uid, wid)
 
-        # GET 初始上下文（创建时预置了 system 模板消息）
+        # GET 初始上下文（纯领域服务：create() 不再预置 system 模板消息，镜像列初始为空）
         res = client.get(
             f"/api/agent/evolutions/{eid}/characters/角色1/context")
         assert res.status_code == 200
         initial = res.json()["messages"]
-        assert isinstance(initial, list) and len(initial) >= 1
+        assert initial == []
 
         # POST 追加 system 消息并持久化
         res = client.post(

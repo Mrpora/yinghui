@@ -1,7 +1,8 @@
 # SPDX-FileCopyrightText: 2025-2026  mrpora@163.com
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""对话路由——角色列表 + SSE 流式对话 + 历史消息 + 删除。"""
+"""对话路由——角色列表 + SSE 流式对话（桥接持流代理）+ 历史消息 + 删除。"""
+import asyncio
 import json
 import logging
 
@@ -9,7 +10,9 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
 
 from server.dependencies import get_sse_manager
+from server.routers._dispatch import dispatch_or_503
 from server.storage.sqlite_client import (
+    now_ms,
     get_db, create_chat, get_chat, list_chats as db_list_chats, get_chat_messages,
     soft_delete_chat, list_novel_characters as db_list_novel_characters,
     get_latest_chat_novel,
@@ -55,11 +58,12 @@ async def start_chat(
     chat_id: str | None = Query(None),
     content: str | None = Query(None),
     sse=Depends(get_sse_manager),
+    db=Depends(get_db),
 ):
-    """SSE 流式对话——首次进入发送开场问候，后续发送用户消息。"""
-    from server.ai.chat_agent.agent import run as chat_run
-
-    # 首次对话：创建 chat 记录
+    """SSE 流式对话——持流代理：建/取 chat 行后触发桥接，从 chat:{cid} 通道
+    逐事件转发直至 done|error（词汇 session_created|thinking|retrieving|
+    memorizing|token|done|error 契约不变）。"""
+    # 1. 建/取 chat 行
     is_new = chat_id is None
     if is_new:
         chat_id = await create_chat(user_id, novel_id, character_id)
@@ -69,25 +73,55 @@ async def start_chat(
         if existing is None:
             raise HTTPException(404, "对话不存在")
 
+    # 2. 用户消息先落库（行为改进：flow 失败重载后消息保留可重发）
+    if content:
+        cursor = await db.execute(
+            "SELECT messages FROM character_chats WHERE chat_id = ?", (chat_id,))
+        row = await cursor.fetchone()
+        messages = json.loads(row["messages"] or "[]") if row else []
+        round_num = sum(1 for m in messages if m.get("role") == "character") + 1
+        messages.append({
+            "role": "user", "content": content,
+            "timestamp": now_ms(), "round": round_num,
+        })
+        await db.execute(
+            "UPDATE character_chats SET messages = ?, modified_at = ? WHERE chat_id = ?",
+            (json.dumps(messages, ensure_ascii=False), now_ms(), chat_id),
+        )
+        await db.commit()
+
+    # 3. 订阅先于触发（bridge 早期阶段事件不丢）；bridge 不可达在开流前 503
+    queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+    channel = f"chat:{chat_id}"
+    sse.subscribe(channel, queue)
+    try:
+        await dispatch_or_503("chats/start", {
+            "chat_id": chat_id,
+            "user_id": user_id,
+            "novel_id": novel_id,
+            "character_id": character_id,
+            "content": content,
+        })
+    except Exception:
+        sse.unsubscribe(channel, queue)
+        raise
+
     async def event_stream():
         try:
             if is_new:
                 yield f"event: session_created\ndata: {{\"chat_id\": \"{chat_id}\"}}\n\n"
-
-            async for sse_event in chat_run(
-                chat_id=chat_id,
-                user_id=user_id,
-                novel_id=novel_id,
-                character_id=character_id,
-                content=content,
-                sse_manager=sse,
-            ):
-                event_type = sse_event.get("event", "message")
-                data = json.dumps(sse_event.get("data", sse_event), ensure_ascii=False)
+            while True:
+                event = await queue.get()
+                event_type = event.get("event", "message")
+                data = json.dumps(event.get("data", event), ensure_ascii=False)
                 yield f"event: {event_type}\ndata: {data}\n\n"
-        except Exception:
-            logger.exception("对话 SSE 异常 chat=%s", chat_id)
-            yield f"event: error\ndata: {json.dumps({'message': '服务器内部错误'})}\n\n"
+                if event_type in ("done", "error"):
+                    break
+        except asyncio.CancelledError:
+            # 前端 abort 断开 SSE 后 flow 继续跑完并落库（bridge 侧治理）
+            logger.info("对话 SSE 断开（flow 继续至落库）chat=%s", chat_id)
+        finally:
+            sse.unsubscribe(channel, queue)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

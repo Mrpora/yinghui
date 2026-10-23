@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025-2026  mrpora@163.com
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""世界路由——CRUD + LLM 智能补全。"""
+"""世界路由——CRUD + LLM 智能补全（补全经桥接分发至外部编排）。"""
 import asyncio
 import json
 import logging
@@ -11,6 +11,7 @@ from server.models.schemas import (
     WorldListResponse, WorldItem,
     CompleteConfigRequest, CompleteConfigResponse,
 )
+from server.routers._dispatch import dispatch_or_503
 from server.storage.sqlite_client import (
     list_worlds, create_world, get_world, get_world_characters, soft_delete_world,
     update_world,
@@ -71,18 +72,21 @@ async def put_world(req: UpdateWorldRequest):
 
 @router.post("/complete-config", response_model=CompleteConfigResponse)
 async def complete_config(req: CompleteConfigRequest):
-    from server.ai.completer_llm.completer import smart_complete_world
+    """同步代理：等 bridge oneshot 补全结果，按原响应模型返回。"""
     logger.info("智能补全世界 name=%s", req.world_name)
-    result = await smart_complete_world(
-        world_data={
-            "name": req.world_name,
-            "description": req.world_description,
+    result = await dispatch_or_503(
+        "worlds/complete-config",
+        {
+            "world_name": req.world_name,
+            "world_description": req.world_description,
             "world_history": req.world_history,
             "rules": req.rules,
             "initial_event": req.initial_event,
             "characters": [c.model_dump() for c in req.characters],
+            "character_count": min(10, max(3, len(req.characters))),
         },
-        character_count=min(10, max(3, len(req.characters))),
+        wait=True,
+        timeout=300.0,
     )
     return CompleteConfigResponse(**result)
 

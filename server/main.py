@@ -28,6 +28,8 @@ async def lifespan(app: FastAPI):
     init_jieba()
     logger.info("数据库初始化 + 预加载完成")
     yield
+    from server.services.bridge_dispatcher import aclose as close_bridge_client
+    await close_bridge_client()
     logger.info("萦回 Demo 服务关闭")
 
 

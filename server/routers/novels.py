@@ -1,7 +1,12 @@
 # SPDX-FileCopyrightText: 2025-2026  mrpora@163.com
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""小说路由——异步生成 + 任务轮询 + SSE 进展 + 列表/详情 + 角色导入。"""
+"""小说路由——异步生成 + 任务轮询 + SSE 进展 + 列表/详情 + 角色导入。
+
+生成与角色提取的 LLM 编排已外移至 yinghui-dsh-plug bridge：
+/generate 预建 novel/task 行后 fire-and-forget 触发；
+/import-characters 同步代理 bridge oneshot 提取，落库仍在本路由。
+"""
 import asyncio
 import json
 import logging
@@ -9,10 +14,12 @@ import uuid
 from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
 
-from server.dependencies import get_novel_agent, get_sse_manager
+from server.dependencies import get_sse_manager
+from server.routers._dispatch import dispatch_or_503
+from server.services.bridge_dispatcher import BridgeUnavailable
 from server.storage.sqlite_client import (
     now_ms,
-    get_db, create_novel, create_novel_task, update_novel_task, get_novel_task,
+    get_db, create_novel, create_novel_task, get_novel_task,
     list_novels, get_novel, get_latest_novel_task_status, soft_delete_novel,
     create_novel_character, list_novel_characters,
     get_processing_task_by_evolution,
@@ -23,45 +30,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/novels", tags=["novels"])
 
 
-async def _run_generation(
-    task_id: str, novel_id: str, agent, world_config: dict,
-    characters: list[dict], initial_event: dict, timeline_events: list[dict],
-    sse_manager, user_id: str, world_id: str, evolution_id: str,
-):
-    """后台异步执行小说生成。"""
-    try:
-        result = await agent.generate(
-            task_id=task_id,
-            world_config=world_config,
-            characters=characters,
-            initial_event=initial_event,
-            timeline_events=timeline_events,
-            sse_manager=sse_manager,
-        )
-        content = result.get("content", "")
-        if not content:
-            out_path = result.get("output_path")
-            if out_path:
-                try:
-                    content = __import__("pathlib").Path(out_path).read_text(encoding="utf-8")
-                except Exception as e:
-                    logger.warning("读取小说输出文件失败 path=%s: %s", out_path, e)
-        title = result.get("title", world_config.get("name", "未命名"))
-        title = f"{title}（小说）"
-
-        db = await get_db()
-        await db.execute(
-            "UPDATE novels SET title = ?, content = ? WHERE novel_id = ?",
-            (title, content, novel_id),
-        )
-        await db.commit()
-        await update_novel_task(task_id, "completed", json.dumps(result, ensure_ascii=False))
-        logger.info("小说生成完成 task_id=%s novel_id=%s", task_id, novel_id)
-    except Exception as e:
-        logger.error("小说生成失败 task_id=%s: %s", task_id, e)
-        await update_novel_task(task_id, "failed", error=str(e))
-
-
 # ── 启动生成 ──
 
 @router.post("/generate")
@@ -69,10 +37,8 @@ async def start_novel_generation(
     user_id: str = Query(...),
     world_id: str = Query(...),
     evolution_id: str = Query(...),
-    agent=Depends(get_novel_agent),
-    sse=Depends(get_sse_manager),
 ):
-    """启动小说生成任务（异步），立即返回 task_id。"""
+    """预建 novel/task 行后触发桥接生成（fire-and-forget），立即返回 task_id。"""
     from server.storage.sqlite_client import get_world, get_world_characters
 
     world, chars = await asyncio.gather(
@@ -89,7 +55,6 @@ async def start_novel_generation(
     evo = await cursor.fetchone()
 
     task_id = f"task_{uuid.uuid4().hex[:8]}"
-    now = now_ms()
 
     world_config = {
         "name": world["name"],
@@ -98,30 +63,26 @@ async def start_novel_generation(
         "rules": world.get("rules", "[]"),
     }
 
-    timeline_events = json.loads(evo["timeline"]) if evo else []
-    initial_event = json.loads(world["initial_event"]) if isinstance(world["initial_event"], str) else world["initial_event"]
-
-    # 预创建 novel 记录
+    # 预创建 novel 记录与任务行（bridge 按 task_id 经 /api/agent/* 回写）
     novel_id = await create_novel(user_id, world_id, evolution_id, world["name"], "", world_config)
     await create_novel_task(task_id, novel_id, evolution_id)
 
-    task = asyncio.create_task(
-        _run_generation(
-            task_id=task_id, novel_id=novel_id, agent=agent,
-            world_config=world_config,
-            characters=[dict(c) for c in chars],
-            initial_event=initial_event,
-            timeline_events=timeline_events,
-            sse_manager=sse,
-            user_id=user_id, world_id=world_id, evolution_id=evolution_id,
-        )
-    )
-    task.add_done_callback(
-        lambda t: logger.error("小说后台任务崩溃 task_id=%s: %s", task_id, t.exception())
-        if t.exception() else None
-    )
+    try:
+        await dispatch_or_503("novels/generate", {
+            "task_id": task_id,
+            "novel_id": novel_id,
+            "user_id": user_id,
+            "world_id": world_id,
+            "evolution_id": evolution_id,
+        })
+    except HTTPException:
+        # 触发失败：回收本请求预建的行，保持「不可达 = 什么都没发生」
+        await db.execute("DELETE FROM novel_tasks WHERE task_id = ?", (task_id,))
+        await db.execute("DELETE FROM novels WHERE novel_id = ?", (novel_id,))
+        await db.commit()
+        raise
 
-    logger.info("小说生成任务已启动 task_id=%s world_id=%s", task_id, world_id)
+    logger.info("小说生成任务已触发 task_id=%s world_id=%s", task_id, world_id)
     return {"task_id": task_id, "novel_id": novel_id, "status": "processing"}
 
 
@@ -237,9 +198,10 @@ async def import_characters(
     novel_id: str = Query(...),
     user_id: str = Query(...),
 ):
-    """从生成的小说中提取角色剧情并导入 novel_characters 表，供对话系统使用。"""
-    from server.ai.extract_llm.extract import extract_character_plots
+    """从生成的小说中提取角色剧情并导入 novel_characters 表，供对话系统使用。
 
+    同步代理：等 bridge oneshot 提取角色剧情（600s），落库仍在本路由完成。
+    """
     novel = await get_novel(novel_id)
     if novel is None:
         raise HTTPException(404, "小说不存在")
@@ -264,13 +226,23 @@ async def import_characters(
     )
     world_chars = await cursor.fetchall()
 
-    # 提取剧情
     char_dicts = [dict(c) for c in world_chars] if world_chars else source_chars
-    plots = await extract_character_plots(novel["content"], char_dicts)
+
+    # 同步代理：bridge oneshot 提取各角色剧情（角色名 → 剧情段落）
+    plots = await dispatch_or_503(
+        "novels/import-characters",
+        {
+            "novel_id": novel_id,
+            "user_id": user_id,
+            "characters": char_dicts,
+        },
+        wait=True,
+        timeout=600.0,
+    )
 
     async def _import_one(wc):
         char_name = wc["name"]
-        story_ctx = plots.get(char_name, "")
+        story_ctx = (plots or {}).get(char_name, "")
         char_id = await create_novel_character(
             novel_id=novel_id,
             user_id=user_id,

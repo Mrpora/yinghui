@@ -9,14 +9,12 @@ import pytest
 
 @pytest.fixture
 def isolate_db(tmp_path, monkeypatch):
-    """数据库隔离——tmp SQLite + dummy LLM_API_KEY + 重置连接单例。
+    """数据库隔离——tmp SQLite + 重置连接单例。
 
-    与 tests/test_api_evolutions.py 的 isolate_db 同款风格；
-    另外重置演化 prompt 模板（SessionManager.create 需要）。
+    与 tests/test_api_evolutions.py 的 isolate_db 同款风格。
     """
     db_path = str(tmp_path / "test_agent_ops.db")
     monkeypatch.setenv("SQLITE_PATH", db_path)
-    monkeypatch.setenv("LLM_API_KEY", "sk-test-agent-ops")
 
     import server.config as cfg
     monkeypatch.setattr(cfg.config, "SQLITE_PATH", db_path)
@@ -24,17 +22,6 @@ def isolate_db(tmp_path, monkeypatch):
     import server.storage.sqlite_client as sc
     sc._conn = None
     asyncio.run(sc.init_db())
-
-    import server.prompt_loader as pl
-    pl.PROMPTS = {
-        "evolution_agent_v2/director_system": "导演模板 {world_name} {world_config}",
-        "evolution_agent_v2/world_injection": "注入 {world_config_json}",
-        "evolution_agent_v2/character_system": (
-            "角色 {character_name} {identity} {personality} {speech_style} "
-            "{world_name} {world_description} {world_history} {world_rules} "
-            "{world_knowledge} {attitude_block} {core_goal} {backstory}"
-        ),
-    }
 
     yield
 

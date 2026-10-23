@@ -1,25 +1,35 @@
 # SPDX-FileCopyrightText: 2025-2026  mrpora@163.com
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""演化路由——会话生命周期 + 轮次推进 + 分支选择 + 剧情干预 + SSE 事件流。"""
+"""演化路由——会话生命周期 + 轮次推进 + 分支选择 + 剧情干预 + SSE 事件流。
+
+LLM 编排已外移至 yinghui-dsh-plug bridge：start-round / select-branch /
+custom-event / intervene 为 fire-and-forget 触发（dispatcher POST 不可达 → 503）。
+状态迁移所有权在本路由层（spec §4.1）：start-round 在 dispatch 成功后原子地
+自增轮次 + 置 RUNNING + SSE round_start；select-branch / custom-event 在
+dispatch 成功后写 user_decision + 置 RUNNING（失败保持 PAUSED 可重试）。
+"""
 import asyncio
 import json
 import logging
 from dataclasses import asdict
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
 
 from server.models.schemas import (
-    CreateSessionRequest, StartRoundRequest, StartRoundResponse,
+    CreateSessionRequest, StartRoundResponse,
     SelectBranchRequest, SelectBranchResponse,
     CustomEventRequest, CustomEventResponse,
     TimelineResponse,
 )
 from server.models.session import SessionStatus
 from server.dependencies import (
-    get_session_manager, get_evolution_agent, get_sse_manager,
+    get_session_manager, get_sse_manager,
 )
+from server.routers._dispatch import dispatch_or_503
+from server.services import agent_ops_service as agent_svc
+from server.storage.sqlite_client import get_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/evolutions", tags=["evolutions"])
@@ -72,7 +82,7 @@ async def get_evolution_detail(
         "current_round": s.current_round,
         "max_rounds": s.max_rounds,
         "created_at": s.created_at,
-        "character_names": list(s.character_contexts.keys()) if s.character_contexts else [],
+        "character_names": s.character_names,
         "world_config": asdict(s.world_config) if s.world_config else None,
     }
 
@@ -95,9 +105,8 @@ async def delete_evolution(
 async def start_round(
     evolution_id: str = Query(...),
     user_id: str = Query(...),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
     mgr=Depends(get_session_manager),
-    pipeline=Depends(get_evolution_agent),
+    sse=Depends(get_sse_manager),
 ):
     s = await mgr.get(evolution_id, user_id)
     if s.status not in (SessionStatus.IDLE, SessionStatus.WAITING_NEXT_ROUND):
@@ -106,8 +115,25 @@ async def start_round(
         raise HTTPException(400, "演化额度已用完")
 
     next_round = s.current_round + 1
+
+    # 触发桥接（不可达 → 503，不做任何状态迁移，可直接重试）
+    await dispatch_or_503("evolutions/start-round", {
+        "evolution_id": evolution_id,
+        "user_id": user_id,
+        "round": next_round,
+    })
+
+    # 原子迁移（唯一所有者）：轮次自增 + 置 RUNNING + SSE round_start
+    await mgr.update_meta(
+        evolution_id,
+        current_round=next_round,
+        status=SessionStatus.RUNNING.value,
+    )
+    await sse.broadcast(f"evolution:{evolution_id}", {
+        "type": "round_start",
+        "data": {"round": next_round, "max_rounds": s.max_rounds},
+    })
     logger.info("启动轮次 evolution_id=%s round=%d", evolution_id, next_round)
-    background_tasks.add_task(pipeline.run_round, evolution_id)
     return StartRoundResponse(round=next_round, status="running")
 
 
@@ -119,21 +145,41 @@ async def select_branch(
     user_id: str = Query(...),
     branch_index: int = Query(..., ge=0, le=5),
     mgr=Depends(get_session_manager),
+    sse=Depends(get_sse_manager),
+    db=Depends(get_db),
 ):
-    from server.ai.evolution_agent.agent import get_session_branches, resolve_session_event
-
     s = await mgr.get(evolution_id, user_id)
     if s.status != SessionStatus.PAUSED:
         raise HTTPException(409, "当前状态不允许选择分支")
 
-    branches = get_session_branches(evolution_id)
+    # 分支文本从 timeline 的 branch_options 事件解析（与响应体/桥接 prompt 共用）
+    branches = await agent_svc.get_pending_branches(db, evolution_id)
     if not branches or branch_index >= len(branches):
         raise HTTPException(400, "分支索引无效")
     branch = branches[branch_index]
+
+    # 触发桥接（不可达 → 503，保持 PAUSED 可重试）
+    await dispatch_or_503("evolutions/select-branch", {
+        "evolution_id": evolution_id,
+        "user_id": user_id,
+        "branch_index": branch_index,
+    })
+
+    # dispatch 成功后原子段：写 user_decision 时间线事件 + 置 RUNNING
+    decision_event = {
+        "type": "user_decision",
+        "content": f"用户选择了第 {branch_index} 条分支「{branch.get('title', '')}」：{branch.get('description', '')}",
+        "round": s.current_round,
+        "branch_index": branch_index,
+    }
+    await mgr.append_timeline_event(evolution_id, decision_event)
+    await mgr.update_meta(evolution_id, status=SessionStatus.RUNNING.value)
+    await sse.broadcast(f"evolution:{evolution_id}", {
+        "type": "timeline_event",
+        "data": {"event": decision_event},
+    })
+
     logger.info("选择分支 evolution_id=%s index=%d", evolution_id, branch_index)
-    success = resolve_session_event(evolution_id, "branch", {"branch_index": branch_index})
-    if not success:
-        raise HTTPException(409, "会话未处于等待决策状态")
     return SelectBranchResponse(
         accepted=True,
         selected_branch={"index": branch_index, "title": branch.get("title", "")},
@@ -148,17 +194,33 @@ async def custom_event(
     user_id: str = Query(...),
     event_text: str = Query(..., min_length=1, max_length=500),
     mgr=Depends(get_session_manager),
+    sse=Depends(get_sse_manager),
 ):
-    from server.ai.evolution_agent_v2.orchestrator import resolve_session_event
-
     s = await mgr.get(evolution_id, user_id)
     if s.status != SessionStatus.PAUSED:
         raise HTTPException(409, "当前状态不允许输入自定义事件")
 
+    # 触发桥接（不可达 → 503，保持 PAUSED 可重试）
+    await dispatch_or_503("evolutions/custom-event", {
+        "evolution_id": evolution_id,
+        "user_id": user_id,
+        "event_text": event_text,
+    })
+
+    # dispatch 成功后原子段：写 user_decision 时间线事件（文本原样入参）+ 置 RUNNING
+    decision_event = {
+        "type": "user_decision",
+        "content": event_text,
+        "round": s.current_round,
+    }
+    await mgr.append_timeline_event(evolution_id, decision_event)
+    await mgr.update_meta(evolution_id, status=SessionStatus.RUNNING.value)
+    await sse.broadcast(f"evolution:{evolution_id}", {
+        "type": "timeline_event",
+        "data": {"event": decision_event},
+    })
+
     logger.info("自定义事件 evolution_id=%s len=%d", evolution_id, len(event_text))
-    success = resolve_session_event(evolution_id, "custom", {"event_text": event_text})
-    if not success:
-        raise HTTPException(409, "会话未处于等待决策状态")
     return CustomEventResponse(accepted=True)
 
 
@@ -186,13 +248,18 @@ async def round_intervene(
         "data": {"event": event_dict},
     })
 
-    director_ctx = await mgr.get_context(evolution_id, "director")
-    director_ctx.append({
-        "role": "user",
-        "content": f"[系统通知] 用户在本轮结束后的干预：{summary}。"
-                   f"请在下一轮感知派发中将该事件分发给相关角色，自然融入叙事。",
-    })
-    await mgr.set_context(evolution_id, "director", director_ctx)
+    # 干预已落库——桥接缺席时仅记录待注入失败，不阻断响应（下次启动由 bridge 扫场）
+    try:
+        from server.services import bridge_dispatcher
+        await bridge_dispatcher.dispatch("evolutions/intervene", {
+            "evolution_id": evolution_id,
+            "user_id": user_id,
+            "event_text": event_text,
+            "round": s.current_round,
+        })
+    except Exception as e:
+        logger.warning("干预事件已落库但桥接触发失败 evolution_id=%s: %s",
+                       evolution_id, e)
 
     return CustomEventResponse(accepted=True)
 

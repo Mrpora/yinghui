@@ -20,7 +20,6 @@ import jieba
 from server.config import config
 from server.storage.sqlite_client import get_db, now_ms
 from server.services.embedding_service import encode_single
-from server.services.llm_tokenizer import tokenize as llm_tokenize
 
 logger = logging.getLogger(__name__)
 
@@ -60,18 +59,7 @@ async def _ensure_vec0(db):
 
 
 def _tokenize(text: str) -> list[str]:
-    """分词并过滤纯标点/空白 token，仅保留含中文或字母数字的 token。
-
-    根据 config.TOKENIZER 选择分词器：
-    - "jieba": 本地 jieba 分词（默认）
-    - "llm":   DeepSeek API 语义分词；失败时回退到 jieba
-    """
-    if config.TOKENIZER == "llm":
-        tokens = llm_tokenize(text)
-        if tokens:
-            return tokens
-        logger.warning("LLM 分词失败，回退到 jieba")
-
+    """分词并过滤纯标点/空白 token，仅保留含中文或字母数字的 token（本地 jieba 分词）。"""
     tokens = jieba.cut(text)
     return [t for t in tokens if re.search(r"[一-鿿\w]", t)]
 

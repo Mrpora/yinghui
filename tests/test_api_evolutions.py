@@ -1,7 +1,9 @@
 # SPDX-FileCopyrightText: 2025-2026  mrpora@163.com
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-"""演化 API 端点测试——会话 CRUD + 时间线。"""
+"""演化 API 端点测试——会话 CRUD + 时间线 + 桥接触发（dispatch 一律 stub）。"""
+import asyncio
+
 import pytest
 
 from tests.helpers import make_characters
@@ -11,33 +13,33 @@ from tests.helpers import make_characters
 def isolate_db(tmp_path, monkeypatch):
     db_path = str(tmp_path / "test.db")
     monkeypatch.setenv("SQLITE_PATH", db_path)
-    monkeypatch.setenv("LLM_API_KEY", "sk-test-evo")
 
     import server.config as cfg
     monkeypatch.setattr(cfg.config, "SQLITE_PATH", db_path)
 
     import server.storage.sqlite_client as sc
     sc._conn = None
-    import asyncio
     asyncio.run(sc.init_db())
-
-    import server.prompt_loader as pl
-    pl.PROMPTS = {
-        "evolution_agent_v2/director_system": "导演模板 {world_name} {world_config}",
-        "evolution_agent_v2/world_injection": "注入 {world_config_json}",
-        "evolution_agent_v2/character_system": (
-            "角色 {character_name} {identity} {personality} {speech_style} "
-            "{world_name} {world_description} {world_history} {world_rules} "
-            "{world_knowledge} {attitude_block} {core_goal} {backstory}"
-        ),
-    }
 
     yield
 
     if sc._conn:
-        import asyncio
         asyncio.run(sc._conn.close())
         sc._conn = None
+
+
+@pytest.fixture(autouse=True)
+def stub_dispatcher(monkeypatch):
+    """所有用例 stub 掉桥接分发——测试不得发真 HTTP。"""
+    import server.services.bridge_dispatcher as bd
+    calls = []
+
+    async def fake_dispatch(agent, payload, *, wait=False, timeout=None):
+        calls.append({"agent": agent, "payload": payload})
+        return {}
+
+    monkeypatch.setattr(bd, "dispatch", fake_dispatch)
+    return calls
 
 
 @pytest.fixture
@@ -60,6 +62,29 @@ def _create_world(client, user_id, name="演化测试世界"):
         "characters": make_characters(3),
     })
     return res.json()["world_id"]
+
+
+def _pause_with_branches(client, uid, eid):
+    """直接落库把演化置为 PAUSED 并写入 branch_options 事件。"""
+    import json as _json
+    from server.storage.sqlite_client import get_db
+
+    async def _setup():
+        db = await get_db()
+        branch_event = {
+            "type": "branch_options", "round": 1,
+            "content": _json.dumps([
+                {"index": 0, "title": "分支甲", "description": "甲描述"},
+                {"index": 1, "title": "分支乙", "description": "乙描述"},
+            ], ensure_ascii=False),
+        }
+        await db.execute(
+            "UPDATE world_evolutions SET status = 'paused', current_round = 1, "
+            "timeline = ? WHERE evolution_id = ?",
+            (_json.dumps([branch_event], ensure_ascii=False), eid),
+        )
+        await db.commit()
+    asyncio.run(_setup())
 
 
 class TestEvolutionSessionLifecycle:
@@ -169,9 +194,9 @@ class TestEvolutionSSE:
             assert any("connected" in line for line in lines)
 
 
-class TestEvolutionStartRoundValidation:
-    def test_start_round_requires_valid_state(self, client):
-        """IDLE 状态的会话允许启动轮次。但启动需要 LLM，此处测试参数校验。"""
+class TestEvolutionStartRound:
+    def test_start_round_dispatches_and_migrates(self, client, stub_dispatcher):
+        """start-round：stub dispatcher 被调用 + 原子迁移（自增/RUNNING）+ round_start SSE。"""
         uid = _login(client, "evo_round")
         wid = _create_world(client, uid)
         create_res = client.post("/api/evolutions/create", json={
@@ -179,9 +204,160 @@ class TestEvolutionStartRoundValidation:
         })
         eid = create_res.json()["evolution_id"]
 
-        # 没有 LLM 时 start-round 会触发后台任务（LLM调用会失败），
-        # 但状态校验应先通过（IDLE → RUNNING）
+        # 预订阅 SSE 通道捕获 round_start
+        from server.dependencies import get_sse_manager
+        sse = get_sse_manager()
+        queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+        sse.subscribe(f"evolution:{eid}", queue)
+
+        try:
+            res = client.post(f"/api/evolutions/start-round?evolution_id={eid}&user_id={uid}")
+        finally:
+            sse.unsubscribe(f"evolution:{eid}", queue)
+
+        assert res.status_code == 200
+        data = res.json()
+        assert data["round"] == 1
+        assert data["status"] == "running"
+
+        # dispatcher 被 stub 调用，载荷含自增后的轮次
+        assert len(stub_dispatcher) == 1
+        call = stub_dispatcher[0]
+        assert call["agent"] == "evolutions/start-round"
+        assert call["payload"] == {"evolution_id": eid, "user_id": uid, "round": 1}
+
+        # SSE round_start {round, max_rounds}
+        event = queue.get_nowait()
+        assert event["type"] == "round_start"
+        assert event["data"] == {"round": 1, "max_rounds": 20}
+
+        # 状态迁移落库：RUNNING + current_round=1
+        detail = client.get(f"/api/evolutions/detail?evolution_id={eid}&user_id={uid}").json()
+        assert detail["status"] == "running"
+        assert detail["current_round"] == 1
+
+    def test_start_round_bridge_unavailable_503_no_migration(self, client, monkeypatch):
+        """桥接不可达 → 503，且不做任何状态迁移（保持原状态可重试）。"""
+        import server.services.bridge_dispatcher as bd
+
+        async def unavailable(agent, payload, *, wait=False, timeout=None):
+            raise bd.BridgeUnavailable("桥接服务未启动")
+
+        monkeypatch.setattr(bd, "dispatch", unavailable)
+
+        uid = _login(client, "evo_round_503")
+        wid = _create_world(client, uid)
+        create_res = client.post("/api/evolutions/create", json={
+            "user_id": uid, "world_id": wid,
+        })
+        eid = create_res.json()["evolution_id"]
+
         res = client.post(f"/api/evolutions/start-round?evolution_id={eid}&user_id={uid}")
-        # 后台任务会发起 LLM 调用，可能返回 201 或遇到 LLM 错误
-        # 这里测试的是路由层接受请求
-        assert res.status_code in (200, 201, 500)
+        assert res.status_code == 503
+        assert "yinghui-dsh-plug bridge" in res.json()["detail"]
+
+        detail = client.get(f"/api/evolutions/detail?evolution_id={eid}&user_id={uid}").json()
+        assert detail["status"] == "idle"
+        assert detail["current_round"] == 0
+
+
+class TestEvolutionSelectBranch:
+    def test_select_branch_writes_decision_and_resumes(self, client, stub_dispatcher):
+        """select-branch：dispatch 成功后写 user_decision + 置 RUNNING，响应体不变。"""
+        uid = _login(client, "evo_branch")
+        wid = _create_world(client, uid)
+        create_res = client.post("/api/evolutions/create", json={
+            "user_id": uid, "world_id": wid,
+        })
+        eid = create_res.json()["evolution_id"]
+        _pause_with_branches(client, uid, eid)
+
+        res = client.post(
+            f"/api/evolutions/select-branch?evolution_id={eid}&user_id={uid}&branch_index=1")
+        assert res.status_code == 200
+        data = res.json()
+        assert data == {"accepted": True, "selected_branch": {"index": 1, "title": "分支乙"}}
+
+        assert stub_dispatcher[0]["agent"] == "evolutions/select-branch"
+        assert stub_dispatcher[0]["payload"]["branch_index"] == 1
+
+        detail = client.get(f"/api/evolutions/detail?evolution_id={eid}&user_id={uid}").json()
+        assert detail["status"] == "running"
+
+        timeline = client.get(f"/api/evolutions/timeline?evolution_id={eid}&user_id={uid}").json()
+        decisions = [e for e in timeline["events"] if e["type"] == "user_decision"]
+        assert len(decisions) == 1
+        assert "分支乙" in decisions[0]["content"]
+
+    def test_select_branch_bridge_unavailable_keeps_paused(self, client, monkeypatch):
+        """dispatch 失败：不写决策、不置 RUNNING，保持 PAUSED 可重试。"""
+        import server.services.bridge_dispatcher as bd
+
+        async def unavailable(agent, payload, *, wait=False, timeout=None):
+            raise bd.BridgeUnavailable("桥接服务未启动")
+
+        monkeypatch.setattr(bd, "dispatch", unavailable)
+
+        uid = _login(client, "evo_branch_503")
+        wid = _create_world(client, uid)
+        create_res = client.post("/api/evolutions/create", json={
+            "user_id": uid, "world_id": wid,
+        })
+        eid = create_res.json()["evolution_id"]
+        _pause_with_branches(client, uid, eid)
+
+        res = client.post(
+            f"/api/evolutions/select-branch?evolution_id={eid}&user_id={uid}&branch_index=0")
+        assert res.status_code == 503
+
+        detail = client.get(f"/api/evolutions/detail?evolution_id={eid}&user_id={uid}").json()
+        assert detail["status"] == "paused"
+
+        timeline = client.get(f"/api/evolutions/timeline?evolution_id={eid}&user_id={uid}").json()
+        assert not [e for e in timeline["events"] if e["type"] == "user_decision"]
+
+    def test_select_branch_twice_conflict_409(self, client, stub_dispatcher):
+        """二次调用：RUNNING 非 PAUSED → 409。"""
+        uid = _login(client, "evo_branch_twice")
+        wid = _create_world(client, uid)
+        create_res = client.post("/api/evolutions/create", json={
+            "user_id": uid, "world_id": wid,
+        })
+        eid = create_res.json()["evolution_id"]
+        _pause_with_branches(client, uid, eid)
+
+        first = client.post(
+            f"/api/evolutions/select-branch?evolution_id={eid}&user_id={uid}&branch_index=0")
+        assert first.status_code == 200
+        second = client.post(
+            f"/api/evolutions/select-branch?evolution_id={eid}&user_id={uid}&branch_index=1")
+        assert second.status_code == 409
+
+
+class TestEvolutionCustomEvent:
+    def test_custom_event_writes_decision_and_resumes(self, client, stub_dispatcher):
+        """custom-event：dispatch 成功后写 user_decision（文本原样）+ 置 RUNNING。"""
+        uid = _login(client, "evo_custom")
+        wid = _create_world(client, uid)
+        create_res = client.post("/api/evolutions/create", json={
+            "user_id": uid, "world_id": wid,
+        })
+        eid = create_res.json()["evolution_id"]
+        _pause_with_branches(client, uid, eid)
+
+        res = client.post(
+            f"/api/evolutions/custom-event?evolution_id={eid}&user_id={uid}"
+            f"&event_text=陨石坠落在城北")
+        assert res.status_code == 200
+        assert res.json() == {"accepted": True}
+
+        assert stub_dispatcher[0]["agent"] == "evolutions/custom-event"
+        assert stub_dispatcher[0]["payload"]["event_text"] == "陨石坠落在城北"
+
+        detail = client.get(f"/api/evolutions/detail?evolution_id={eid}&user_id={uid}").json()
+        assert detail["status"] == "running"
+
+        timeline = client.get(f"/api/evolutions/timeline?evolution_id={eid}&user_id={uid}").json()
+        decisions = [e for e in timeline["events"] if e["type"] == "user_decision"]
+        assert len(decisions) == 1
+        assert decisions[0]["content"] == "陨石坠落在城北"

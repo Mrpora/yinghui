@@ -15,7 +15,6 @@ def isolate_db(tmp_path, monkeypatch):
     """隔离数据库到临时路径。"""
     db_path = str(tmp_path / "test.db")
     monkeypatch.setenv("SQLITE_PATH", db_path)
-    monkeypatch.setenv("LLM_API_KEY", "sk-test-sm")
 
     import server.config as cfg
     monkeypatch.setattr(cfg.config, "SQLITE_PATH", db_path)
@@ -24,17 +23,6 @@ def isolate_db(tmp_path, monkeypatch):
     sc._conn = None
     import asyncio
     asyncio.run(sc.init_db())
-
-    import server.prompt_loader as pl
-    pl.PROMPTS = {
-        "evolution_agent_v2/director_system": "导演提示词模板 {world_name} {world_config}",
-        "evolution_agent_v2/world_injection": "世界配置注入 {world_config_json}",
-        "evolution_agent_v2/character_system": (
-            "角色提示词 {character_name} {identity} {personality} {speech_style} "
-            "{world_name} {world_description} {world_history} {world_rules} "
-            "{world_knowledge} {attitude_block} {core_goal} {backstory}"
-        ),
-    }
 
     yield
 
@@ -106,43 +94,6 @@ class TestWorldConfigBuilding:
         assert wc.get_character("不存在") is None
 
 
-class TestDirectorContextBuilding:
-    """测试导演上下文构建。"""
-
-    @pytest.mark.asyncio
-    async def test_build_director_context(self):
-        wid, chars = await _create_test_world()
-        from server.storage.sqlite_client import get_world
-        world_row = await get_world(wid)
-
-        mgr = SessionManager()
-        wc = mgr._build_world_config(world_row, chars)
-        ctx = mgr._build_director_context(wc)
-
-        assert len(ctx) == 1
-        assert ctx[0]["role"] == "system"
-        assert "测试世界" in ctx[0]["content"]
-        assert "张三" in ctx[0]["content"]
-        assert "李四" in ctx[0]["content"]
-
-    @pytest.mark.asyncio
-    async def test_build_character_context(self):
-        wid, chars = await _create_test_world()
-        from server.storage.sqlite_client import get_world
-        world_row = await get_world(wid)
-
-        mgr = SessionManager()
-        wc = mgr._build_world_config(world_row, chars)
-        zhangsan = wc.get_character("张三")
-        ctx = mgr._build_character_context(zhangsan, wc)
-
-        assert len(ctx) == 1
-        assert ctx[0]["role"] == "system"
-        assert "张三" in ctx[0]["content"]
-        assert "战士" in ctx[0]["content"]
-        assert "李四" in ctx[0]["content"]
-
-
 class TestSessionLifecycle:
     """测试会话 CRUD 生命周期。"""
 
@@ -158,8 +109,9 @@ class TestSessionLifecycle:
         assert session.status == SessionStatus.IDLE
         assert session.current_round == 0
         assert session.character_names == ["张三", "李四", "王五"]
-        assert len(session.director_context) == 1
-        assert len(session.character_contexts) == 3
+        # 纯领域服务：create() 不再预置 prompt 上下文（镜像列初始为空）
+        assert session.director_context == []
+        assert session.character_contexts == {}
 
     @pytest.mark.asyncio
     async def test_get_session(self):
@@ -248,13 +200,13 @@ class TestContextOperations:
         session = await mgr.create("test_user", wid)
 
         ctx = await mgr.get_context(session.id, "张三")
-        assert len(ctx) == 1
+        assert ctx == []
         new_msg = {"role": "assistant", "content": "角色回复"}
         ctx.append(new_msg)
         await mgr.set_context(session.id, "张三", ctx)
 
         reloaded = await mgr.get_context(session.id, "张三")
-        assert len(reloaded) == 2
+        assert len(reloaded) == 1
         assert reloaded[-1]["content"] == "角色回复"
 
 
@@ -373,14 +325,3 @@ class TestMaxRoundsScaling:
         mgr = SessionManager()
         session = await mgr.create("cap_user", wid)
         assert session.max_rounds == 30   # round(20×10/3)=67 被 30 封顶
-
-
-class TestMaxNotifiesFormula:
-    """互动行动上限公式（决策：按参与人数更大弹性，min(n×3, 15)）。"""
-
-    def test_compute_max_notifies(self):
-        from server.ai.evolution_agent.agent import compute_max_notifies
-        assert compute_max_notifies(3) == 9
-        assert compute_max_notifies(4) == 12
-        assert compute_max_notifies(5) == 15
-        assert compute_max_notifies(10) == 15

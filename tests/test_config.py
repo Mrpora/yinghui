@@ -72,70 +72,56 @@ class TestListEnv:
 
 
 class TestConfigDefaults:
-    """验证 Config 对象在模拟 API key 后的默认值。"""
-
-    @pytest.fixture(autouse=True)
-    def _set_key(self, monkeypatch):
-        monkeypatch.setenv("LLM_API_KEY", "sk-test-config")
-
-    def test_config_requires_api_key(self, monkeypatch):
-        """没有 API key 时应抛出 ValueError。"""
-        monkeypatch.delenv("LLM_API_KEY", raising=False)
-        with pytest.raises(ValueError, match="LLM_API_KEY"):
-            from server.config import Config
-            Config()
+    """验证 Config 对象的默认值与 env 覆盖。"""
 
     def test_config_loads_defaults(self, monkeypatch):
         # load_dotenv 不会覆盖已有环境变量，setenv 后 reload 即可隔离 .env
-        monkeypatch.setenv("LLM_API_KEY", "sk-test")
-        monkeypatch.setenv("LLM_BASE_URL", "https://api.deepseek.com")
         monkeypatch.setenv("INSTANT_MEMORY_SIZE", "200")
         monkeypatch.setenv("EVOLUTION_DEFAULT_ROUNDS", "20")
-        monkeypatch.setenv("EVOLUTION_MAX_LOOPS", "30")
-        monkeypatch.setenv("CHAT_MAX_TOKENS", "2048")
-        monkeypatch.setenv("CHAT_MAX_AGENT_LOOP", "15")
         monkeypatch.setenv("MEMORY_LIMIT", "10")
         monkeypatch.setenv("CARE_COOLDOWN_HOURS", "24")
         monkeypatch.setenv("DECAY_HALF_LIFE_DAYS", "15.0")
         monkeypatch.setenv("NOVEL_CHAPTER_MIN_CHARS", "3000")
         monkeypatch.setenv("NOVEL_CHAPTER_MAX_CHARS", "5000")
-        monkeypatch.setenv("NOVEL_CYCLE_MAX", "10")
-        monkeypatch.setenv("LLM_RETRY_MAX", "3")
         monkeypatch.setenv("EMBEDDING_DIM", "1024")
+        monkeypatch.setenv("BRIDGE_URL", "http://127.0.0.1:8100")
 
         from importlib import reload
         import server.config
         reload(server.config)
         c = server.config.Config()
-        assert c.LLM_BASE_URL == "https://api.deepseek.com"
         assert c.EVOLUTION_DEFAULT_ROUNDS == 20
-        assert c.EVOLUTION_MAX_LOOPS == 30
-        assert c.CHAT_MAX_TOKENS == 2048
-        assert c.CHAT_MAX_AGENT_LOOP == 15
         assert c.MEMORY_LIMIT == 10
         assert c.INSTANT_MEMORY_SIZE == 200
         assert c.CARE_COOLDOWN_HOURS == 24
         assert c.DECAY_HALF_LIFE_DAYS == 15.0
         assert c.NOVEL_CHAPTER_MIN_CHARS == 3000
         assert c.NOVEL_CHAPTER_MAX_CHARS == 5000
-        assert c.NOVEL_CYCLE_MAX == 10
-        assert c.LLM_RETRY_MAX == 3
         assert c.EMBEDDING_DIM == 1024
+        assert c.BRIDGE_URL == "http://127.0.0.1:8100"
+
+    def test_config_bridge_url_default(self, monkeypatch):
+        """未设置 BRIDGE_URL 时默认指向本机 8100。"""
+        monkeypatch.delenv("BRIDGE_URL", raising=False)
+        from importlib import reload
+        import server.config
+        reload(server.config)
+        c = server.config.Config()
+        assert c.BRIDGE_URL == "http://127.0.0.1:8100"
 
     def test_config_env_overrides(self, monkeypatch):
         monkeypatch.setenv("EVOLUTION_DEFAULT_ROUNDS", "10")
-        monkeypatch.setenv("CHAT_TEMPERATURE", "0.9")
         monkeypatch.setenv("MEMORY_LIMIT", "5")
+        monkeypatch.setenv("BRIDGE_URL", "http://127.0.0.1:9000")
         from importlib import reload
         import server.config
         reload(server.config)
         c = server.config.Config()
         assert c.EVOLUTION_DEFAULT_ROUNDS == 10
-        assert c.CHAT_TEMPERATURE == 0.9
         assert c.MEMORY_LIMIT == 5
+        assert c.BRIDGE_URL == "http://127.0.0.1:9000"
 
     def test_config_max_rounds(self, monkeypatch):
-        monkeypatch.setenv("LLM_API_KEY", "sk-test")
         from importlib import reload
         import server.config
         reload(server.config)

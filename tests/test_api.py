@@ -15,7 +15,6 @@ def isolate_db(tmp_path, monkeypatch):
     """隔离数据库到临时路径。"""
     db_path = str(tmp_path / "test.db")
     monkeypatch.setenv("SQLITE_PATH", db_path)
-    monkeypatch.setenv("LLM_API_KEY", "sk-test-placeholder")
 
     import server.config as cfg
     monkeypatch.setattr(cfg.config, "SQLITE_PATH", db_path)
@@ -24,9 +23,6 @@ def isolate_db(tmp_path, monkeypatch):
     sc._conn = None
     import asyncio
     asyncio.run(sc.init_db())
-
-    import server.prompt_loader as pl
-    pl.PROMPTS = {}
 
     yield
 
@@ -201,18 +197,36 @@ class TestWorlds:
         assert "角色1" in res2.json()["detail"]
 
     def test_complete_config_clamps_character_count(self, client, monkeypatch):
-        import server.ai.completer_llm.completer as comp
+        import server.services.bridge_dispatcher as bd
         captured = {}
 
-        async def fake_smart(world_data, character_count=3):
-            captured["n"] = character_count
+        async def fake_dispatch(agent, payload, *, wait=False, timeout=None):
+            captured["agent"] = agent
+            captured["payload"] = payload
+            captured["wait"] = wait
             return {"world_history": "", "rules": [], "initial_event": None,
                     "characters": []}
 
-        monkeypatch.setattr(comp, "smart_complete_world", fake_smart)
+        monkeypatch.setattr(bd, "dispatch", fake_dispatch)
         res = client.post("/api/worlds/complete-config", json={
             "world_name": "测试", "world_description": "描述",
             "characters": [{"name": f"a{i}", "identity": ""} for i in range(20)],
         })
         assert res.status_code == 200
-        assert captured["n"] == 10    # min(10, max(3, 20))
+        assert captured["agent"] == "worlds/complete-config"
+        assert captured["wait"] is True
+        assert captured["payload"]["character_count"] == 10    # min(10, max(3, 20))
+
+    def test_complete_config_bridge_unavailable_503(self, client, monkeypatch):
+        import server.services.bridge_dispatcher as bd
+
+        async def unavailable(agent, payload, *, wait=False, timeout=None):
+            raise bd.BridgeUnavailable("桥接服务未启动")
+
+        monkeypatch.setattr(bd, "dispatch", unavailable)
+        res = client.post("/api/worlds/complete-config", json={
+            "world_name": "测试", "world_description": "描述",
+            "characters": [{"name": "a", "identity": ""}],
+        })
+        assert res.status_code == 503
+        assert "yinghui-dsh-plug bridge" in res.json()["detail"]

@@ -87,6 +87,7 @@ Demo 视频完整展示了 C 线（世界演化）和 A 线（角色对话）的
 - Python 3.11+
 - Node.js 20+
 - [可选] Docker & Docker Compose
+- [可选] yinghui-dsh-plug（bridge + DSH）——不启动时纯领域功能可用，触发 LLM 的接口返回 503
 
 ### 源码安装
 
@@ -102,7 +103,7 @@ cd yinghui
 ```bash
 pip install -r requirements.txt
 cp .env.example .env
-# 编辑 .env，至少填入 LLM_API_KEY
+# 编辑 .env（无必填项；BRIDGE_URL 默认 http://127.0.0.1:8100）
 ```
 
 如需向量记忆检索（推荐）：
@@ -125,11 +126,19 @@ npm install
 npm run dev              # → http://localhost:5173
 ```
 
+**4. agent 编排（可选，完整体验必需）**
+
+世界演化、角色对话、小说生成等 LLM 编排由外部 yinghui-dsh-plug 承担：
+
+```bash
+# 另见 yinghui-dsh-plug 仓库 README——安装 DSH preset、启动 bridge（:8100）
+```
+
 ### Docker 启动
 
 ```bash
 cp .env.example .env
-# 编辑 .env，至少填入 LLM_API_KEY
+# 编辑 .env（无必填项；agent 编排需另行启动 yinghui-dsh-plug bridge）
 docker compose up -d
 # 后端 → http://localhost:8000
 # 前端 → http://localhost:80
@@ -137,43 +146,61 @@ docker compose up -d
 
 ## 架构
 
-![系统架构图](docs/images/system-architecture.png)
+yinghui 是**纯领域服务**（进程内无任何 LLM 调用）；全部 agent 编排外移至
+yinghui-dsh-plug 桥接进程，由 DeepSeek Harness（DSH）驱动。
 
-### 世界演化引擎（多 Agent 调度）
+```
+Vue 前端（零改动；/api/* 契约 + 3 条 SSE 词汇表不变）
+   │
+   ▼
+yinghui FastAPI :8000 —— 纯领域服务（无任何 LLM 调用）
+   ├─ 前端路由原样保留；LLM 类路由改调 BridgeDispatcher
+   ├─ 新增 /api/agent/*：领域操作接口（MCP 工具的后端实现，仅回环使用）
+   └─ BridgeDispatcher ──HTTP 127.0.0.1:8100──► plug bridge
+                                                    │ RPC /api/session/* + WS /api/remote.mux
+                                                    ▼
+                                          DSH desktop（agent 编排）
+                                                    │ stdio MCP
+                                                    ▼
+                                          plug mcp_server ──REST──► yinghui /api/agent/*
+```
 
-导演 Agent（Master）掌握上帝视角，每轮选择即将互动的角色组合，
-向角色 Agent（Slave）分发有限的感知视图，询问互动意愿。
-角色基于自身设定返回决策和对话，导演汇总为事件记录、更新世界状态。
+调用方向约定：**前端→yinghui 不变；yinghui→bridge 触发；DSH→MCP→yinghui 回写**。
+数据唯一真相源始终是 yinghui 的 SQLite；DSH 会话只是上下文载体，可随时重建。
 
-导演与角色上下文各自独立——角色不感知"正在被调度"，
-避免元层面污染影响角色扮演的沉浸感。
+### 组件职责
 
+| 组件 | 职责 |
+|------|------|
+| routers（前端 API） | 世界/演化/小说/对话/记忆的 REST + SSE 契约保持不变；触发 LLM 的 7 条路由改向 bridge 分发（触发失败 503，中文 detail） |
+| /api/agent/*（内部接口） | 领域操作面：时间线/分支/轮次收束/记忆检索/章节硬门等回写与读取，供 MCP 工具与 bridge flows 调用（仅回环，不对外暴露） |
+| services | 记忆（BM25+向量混合检索、衰减）、关怀、安全、会话/时间线/关系存储、precheck 硬门——纯领域逻辑 |
+| BridgeDispatcher | yinghui→bridge 的唯一出站通道（httpx.AsyncClient）：fire-and-forget 触发（10s）与 oneshot 同步代理（300s/600s） |
+| storage / sse | SQLite + sqlite-vec；SSEManager 发布-订阅（演化/对话/小说三通道词汇冻结） |
+
+### 运行前置
+
+触发 LLM 的功能（演化推演、角色对话、小说生成、世界补全、角色提取）需要先启动：
+
+1. **DSH desktop**（DeepSeek Harness）
+2. **yinghui-dsh-plug bridge**（默认 127.0.0.1:8100，`BRIDGE_URL` 可覆盖）
+
+bridge 缺席时：纯领域功能（世界管理、时间线、记忆 CRUD 等）不受影响；
+触发类接口返回 503 `桥接服务未启动：请先运行 yinghui-dsh-plug bridge（默认 127.0.0.1:8100）`。
 
 ### 记忆系统
 
-每轮对话持久化到 SQLite。用户透露的个人信息被 Agent 自动提取，
-存入永久记忆（BM25 关键词索引 + 向量嵌入混合检索）。
+每轮对话持久化到 SQLite。用户透露的个人信息由对话编排（bridge 侧）提取，
+经 /api/agent 写入永久记忆（BM25 关键词索引 + 向量嵌入混合检索）。
 记忆回响基于时间衰减算法，让角色在合适时机主动提起用户过往经历。
-
-### 小说生成流水线
-
-演化记录 → 写作 Agent 逐章创作 → 审查 Agent 评审（结构/人设/文风）
-→ 修改 → 重复直到通过或达到最大轮次。每章字数上下限可配置（默认 3000-5000 字）。
 
 ## 项目结构
 
 ```
 yinghui/
 ├── server/
-│   ├── ai/
-│   │   ├── evolution_agent/  # 世界演化引擎（多 Agent 调度）
-│   │   ├── chat_agent/       # 角色对话 Agent（工具调用 + 记忆）
-│   │   ├── novel_agent/      # 小说生成（写作→审查→修订）
-│   │   ├── completer_llm/    # 世界设定自动补全
-│   │   ├── extract_llm/      # 角色剧情上下文提取
-│   │   └── common/           # LLM 客户端（重试、超时）
-│   ├── routers/              # REST API（7 组路由）
-│   ├── services/             # 记忆/嵌入/关怀/安全/会话管理
+│   ├── routers/              # REST API（7 组前端路由 + /api/agent/* 领域操作面）
+│   ├── services/             # 记忆/嵌入/关怀/安全/会话管理 + 桥接分发器
 │   ├── storage/              # SQLite + sqlite-vec 向量表
 │   ├── sse/                  # Server-Sent Events 发布-订阅
 │   ├── models/               # Pydantic 模型定义
@@ -190,7 +217,7 @@ yinghui/
 ├── data/                     # SQLite 数据库 + 工作目录
 ├── models/                   # 本地嵌入模型
 ├── docs/                     # Demo 视频与素材
-├── tests/                    # 120 个后端测试（pytest）
+├── tests/                    # 后端测试（pytest）
 └── .env.example              # 环境变量模板
 ```
 
@@ -199,39 +226,21 @@ yinghui/
 所有配置项通过 `.env` 文件设置，完整列表见 `.env.example`。
 
 <details>
-<summary><b>LLM 通用</b></summary>
+<summary><b>桥接</b></summary>
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
-| `LLM_API_KEY` | API 密钥（**必填**） | — |
-| `LLM_BASE_URL` | API 地址 | `https://api.deepseek.com` |
-| `LLM_RETRY_MAX` | 最大重试次数 | `3` |
+| `BRIDGE_URL` | yinghui-dsh-plug bridge 地址（agent 编排所在的外部进程） | `http://127.0.0.1:8100` |
 
 </details>
 
 <details>
-<summary><b>演化 Agent</b></summary>
+<summary><b>演化</b></summary>
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
-| `EVOLUTION_DIRECTOR_MODEL` | 导演模型 | `deepseek-v4-flash` |
-| `EVOLUTION_CHARACTER_MODEL` | 角色模型 | `deepseek-v4-flash` |
 | `EVOLUTION_DEFAULT_ROUNDS` | 默认演化轮数 | `20` |
-| `EVOLUTION_MAX_LOOPS` | 最大循环次数 | `30` |
 | `EVOLUTION_MAX_ROUNDS` | 演化轮数上限（默认轮数按角色数正比缩放后封顶） | `100` |
-| `EVOLUTION_COMPACT_THRESHOLD_CHARS` | 导演上下文压缩触发阈值（字符） | `400000` |
-
-</details>
-
-<details>
-<summary><b>对话 Agent</b></summary>
-
-| 配置项 | 说明 | 默认值 |
-|--------|------|--------|
-| `CHAT_MODEL` | 对话模型 | `deepseek-v4-flash` |
-| `CHAT_MAX_TOKENS` | 最大回复 token | `2048` |
-| `CHAT_TEMPERATURE` | 生成温度 | `0.5` |
-| `CHAT_MAX_AGENT_LOOP` | 最大工具调用轮数 | `15` |
 
 </details>
 
@@ -241,7 +250,7 @@ yinghui/
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
 | `MEMORY_LIMIT` | 永久记忆上限 | `10` |
-| `INSTANT_MEMORY_SIZE` | 即时记忆条数 | `20` |
+| `INSTANT_MEMORY_SIZE` | 即时记忆条数 | `200` |
 | `CARE_COOLDOWN_HOURS` | 主动关怀冷却时间 | `24` |
 | `DECAY_HALF_LIFE_DAYS` | 记忆衰减半衰期（天） | `15.0` |
 | `EMBEDDING_MODEL` | 嵌入模型路径 | `models/bge-large-zh-v1.5` |
@@ -249,15 +258,13 @@ yinghui/
 </details>
 
 <details>
-<summary><b>小说 Agent</b></summary>
+<summary><b>小说（precheck 硬门）</b></summary>
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
-| `NOVEL_AGENT_MODEL` | 写作模型 | `deepseek-v4-flash` |
-| `NOVEL_REVIEWER_MODEL` | 审查模型 | `deepseek-v4-flash` |
 | `NOVEL_CHAPTER_MIN_CHARS` | 每章最少字数 | `3000` |
 | `NOVEL_CHAPTER_MAX_CHARS` | 每章最多字数 | `5000` |
-| `NOVEL_CYCLE_MAX` | 最大修改轮数 | `10` |
+| `NOVEL_WORK_DIR_BASE` | 任务工作目录 | `data/work` |
 
 </details>
 
@@ -272,6 +279,7 @@ yinghui/
 | `/api/chats` | 角色列表 + SSE 流式对话 + 历史消息 |
 | `/api/memories` | 记忆查询/删除/过期管理/清空 |
 | `/api/settings` | 主动关怀等级设置 |
+| `/api/agent` | 领域操作接口（**内部接口**——供 yinghui-dsh-plug 的 MCP 工具与 bridge flows 回环调用，不对外暴露） |
 
 对话和小说生成接口提供 **SSE 流式输出**，关键状态节点实时推送到客户端。
 
@@ -314,7 +322,7 @@ pytest tests/test_config.py -v         # 配置解析
 
 ```bash
 cp .env.example .env
-# 编辑 .env 填入 LLM_API_KEY
+# 无必填项；如需完整体验，BRIDGE_URL 保持默认并启动 yinghui-dsh-plug bridge
 ```
 
 ## 贡献指南
