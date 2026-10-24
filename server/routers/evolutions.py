@@ -5,9 +5,12 @@
 
 LLM 编排已外移至 yinghui-dsh-plug bridge：start-round / select-branch /
 custom-event / intervene 为 fire-and-forget 触发（dispatcher POST 不可达 → 503）。
-状态迁移所有权在本路由层（spec §4.1）：start-round 在 dispatch 成功后原子地
-自增轮次 + 置 RUNNING + SSE round_start；select-branch / custom-event 在
-dispatch 成功后写 user_decision + 置 RUNNING（失败保持 PAUSED 可重试）。
+状态迁移所有权在本路由层（spec §4.1），且采用「原子占位 → dispatch → 失败回滚」
+顺序：先以条件 UPDATE（WHERE status IN 合法前置态）原子占位封死 check-then-act
+并发窗口（并发请求仅一个占位成功，其余 409），占位成功后 dispatch，dispatch 失败
+则回滚占位（恢复原状态）并转 503 可重试；start-round 自增轮次 + 置 RUNNING +
+SSE round_start，select-branch / custom-event 在 dispatch 成功后写 user_decision
+（失败时决策尚未写入，无需清理）。
 """
 import asyncio
 import json
@@ -116,19 +119,33 @@ async def start_round(
 
     next_round = s.current_round + 1
 
-    # 触发桥接（不可达 → 503，不做任何状态迁移，可直接重试）
-    await dispatch_or_503("evolutions/start-round", {
-        "evolution_id": evolution_id,
-        "user_id": user_id,
-        "round": next_round,
-    })
-
-    # 原子迁移（唯一所有者）：轮次自增 + 置 RUNNING + SSE round_start
-    await mgr.update_meta(
+    # 原子占位（条件 UPDATE）：仅当状态仍处于合法前置态时自增轮次 + 置 RUNNING，
+    # 封死「读校验 → dispatch → 写」的并发窗口（并发请求只有一个占位成功）
+    claimed = await mgr.compare_and_update(
         evolution_id,
+        [SessionStatus.IDLE.value, SessionStatus.WAITING_NEXT_ROUND.value],
         current_round=next_round,
         status=SessionStatus.RUNNING.value,
     )
+    if not claimed:
+        raise HTTPException(409, "当前状态不允许启动新轮次")
+
+    # 占位成功后触发桥接；失败回滚占位（恢复原 status 与 current_round）→ 503 可重试
+    try:
+        await dispatch_or_503("evolutions/start-round", {
+            "evolution_id": evolution_id,
+            "user_id": user_id,
+            "round": next_round,
+        })
+    except HTTPException:
+        await mgr.update_meta(
+            evolution_id,
+            current_round=s.current_round,
+            status=s.status.value,
+        )
+        raise
+
+    # SSE round_start
     await sse.broadcast(f"evolution:{evolution_id}", {
         "type": "round_start",
         "data": {"round": next_round, "max_rounds": s.max_rounds},
@@ -158,14 +175,28 @@ async def select_branch(
         raise HTTPException(400, "分支索引无效")
     branch = branches[branch_index]
 
-    # 触发桥接（不可达 → 503，保持 PAUSED 可重试）
-    await dispatch_or_503("evolutions/select-branch", {
-        "evolution_id": evolution_id,
-        "user_id": user_id,
-        "branch_index": branch_index,
-    })
+    # 原子占位（条件 UPDATE）：置 RUNNING（current_round 不变），封死并发双通过
+    claimed = await mgr.compare_and_update(
+        evolution_id,
+        [SessionStatus.PAUSED.value],
+        status=SessionStatus.RUNNING.value,
+    )
+    if not claimed:
+        raise HTTPException(409, "当前状态不允许选择分支")
 
-    # dispatch 成功后原子段：写 user_decision 时间线事件 + 置 RUNNING
+    # 占位成功后触发桥接；失败回滚占位为 PAUSED → 503 可重试
+    # （user_decision 因 dispatch-first 语义尚未写入，无需清理）
+    try:
+        await dispatch_or_503("evolutions/select-branch", {
+            "evolution_id": evolution_id,
+            "user_id": user_id,
+            "branch_index": branch_index,
+        })
+    except HTTPException:
+        await mgr.update_meta(evolution_id, status=SessionStatus.PAUSED.value)
+        raise
+
+    # dispatch 成功：写 user_decision 时间线事件 + SSE
     decision_event = {
         "type": "user_decision",
         "content": f"用户选择了第 {branch_index} 条分支「{branch.get('title', '')}」：{branch.get('description', '')}",
@@ -173,7 +204,6 @@ async def select_branch(
         "branch_index": branch_index,
     }
     await mgr.append_timeline_event(evolution_id, decision_event)
-    await mgr.update_meta(evolution_id, status=SessionStatus.RUNNING.value)
     await sse.broadcast(f"evolution:{evolution_id}", {
         "type": "timeline_event",
         "data": {"event": decision_event},
@@ -200,21 +230,34 @@ async def custom_event(
     if s.status != SessionStatus.PAUSED:
         raise HTTPException(409, "当前状态不允许输入自定义事件")
 
-    # 触发桥接（不可达 → 503，保持 PAUSED 可重试）
-    await dispatch_or_503("evolutions/custom-event", {
-        "evolution_id": evolution_id,
-        "user_id": user_id,
-        "event_text": event_text,
-    })
+    # 原子占位（条件 UPDATE）：置 RUNNING（current_round 不变），封死并发双通过
+    claimed = await mgr.compare_and_update(
+        evolution_id,
+        [SessionStatus.PAUSED.value],
+        status=SessionStatus.RUNNING.value,
+    )
+    if not claimed:
+        raise HTTPException(409, "当前状态不允许输入自定义事件")
 
-    # dispatch 成功后原子段：写 user_decision 时间线事件（文本原样入参）+ 置 RUNNING
+    # 占位成功后触发桥接；失败回滚占位为 PAUSED → 503 可重试
+    # （user_decision 因 dispatch-first 语义尚未写入，无需清理）
+    try:
+        await dispatch_or_503("evolutions/custom-event", {
+            "evolution_id": evolution_id,
+            "user_id": user_id,
+            "event_text": event_text,
+        })
+    except HTTPException:
+        await mgr.update_meta(evolution_id, status=SessionStatus.PAUSED.value)
+        raise
+
+    # dispatch 成功：写 user_decision 时间线事件（文本原样入参）+ SSE
     decision_event = {
         "type": "user_decision",
         "content": event_text,
         "round": s.current_round,
     }
     await mgr.append_timeline_event(evolution_id, decision_event)
-    await mgr.update_meta(evolution_id, status=SessionStatus.RUNNING.value)
     await sse.broadcast(f"evolution:{evolution_id}", {
         "type": "timeline_event",
         "data": {"event": decision_event},

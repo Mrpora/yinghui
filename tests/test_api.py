@@ -230,3 +230,43 @@ class TestWorlds:
         })
         assert res.status_code == 503
         assert "yinghui-dsh-plug bridge" in res.json()["detail"]
+
+
+class TestNovelsGenerate:
+    def test_generate_bridge_unavailable_503_no_orphan_rows(self, client, monkeypatch):
+        """stub dispatcher 抛 BridgeUnavailable → 503，且预建 novel/task 行被回收（无孤儿）。"""
+        import asyncio
+        import server.services.bridge_dispatcher as bd
+
+        async def unavailable(agent, payload, *, wait=False, timeout=None):
+            raise bd.BridgeUnavailable("桥接服务未启动")
+
+        monkeypatch.setattr(bd, "dispatch", unavailable)
+
+        uid = _login(client, "novel_orphan")
+        res = client.post("/api/worlds/create", json={
+            "user_id": uid, "name": "孤儿回收世界", "description": "",
+            "world_history": "", "rules": [],
+            "initial_event": {"content": "", "time": ""},
+            "characters": make_characters(3),
+        })
+        wid = res.json()["world_id"]
+        evo = client.post("/api/evolutions/create", json={"user_id": uid, "world_id": wid})
+        eid = evo.json()["evolution_id"]
+
+        res = client.post(
+            f"/api/novels/generate?user_id={uid}&world_id={wid}&evolution_id={eid}")
+        assert res.status_code == 503
+        assert "yinghui-dsh-plug bridge" in res.json()["detail"]
+
+        from server.storage.sqlite_client import get_db
+
+        async def _count_rows():
+            db = await get_db()
+            novels = await (await db.execute("SELECT COUNT(*) AS c FROM novels")).fetchone()
+            tasks = await (await db.execute("SELECT COUNT(*) AS c FROM novel_tasks")).fetchone()
+            return novels["c"], tasks["c"]
+
+        novel_count, task_count = asyncio.run(_count_rows())
+        assert novel_count == 0
+        assert task_count == 0

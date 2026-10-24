@@ -16,7 +16,6 @@ from fastapi.responses import StreamingResponse
 
 from server.dependencies import get_sse_manager
 from server.routers._dispatch import dispatch_or_503
-from server.services.bridge_dispatcher import BridgeUnavailable
 from server.storage.sqlite_client import (
     now_ms,
     get_db, create_novel, create_novel_task, get_novel_task,
@@ -75,8 +74,9 @@ async def start_novel_generation(
             "world_id": world_id,
             "evolution_id": evolution_id,
         })
-    except HTTPException:
-        # 触发失败：回收本请求预建的行，保持「不可达 = 什么都没发生」
+    except Exception:
+        # 触发失败（含 bridge 非 2xx / 非法 JSON 被包装为 BridgeUnavailable → 503）：
+        # 回收本请求预建的行，保持「不可达 = 什么都没发生」
         await db.execute("DELETE FROM novel_tasks WHERE task_id = ?", (task_id,))
         await db.execute("DELETE FROM novels WHERE novel_id = ?", (novel_id,))
         await db.commit()

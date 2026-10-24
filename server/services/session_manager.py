@@ -318,6 +318,39 @@ class SessionManager:
         )
         await db.commit()
 
+    async def compare_and_update(
+        self, session_id: str, expected_statuses: list[str], **kwargs
+    ) -> bool:
+        """条件原子更新（状态机 CAS）：仅当当前 status ∈ expected_statuses 时更新。
+
+        单条条件 UPDATE（WHERE status IN (...)），消除「读校验 → 异步 dispatch →
+        写回」之间的 check-then-act 并发窗口：并发请求只有一个能占位成功。
+
+        Args:
+            session_id: 会话 ID
+            expected_statuses: 允许占位的合法前置状态值列表
+            **kwargs: 要更新的字段（同 update_meta 的白名单）
+
+        Returns:
+            是否占位成功（UPDATE rowcount > 0）。
+        """
+        db = await get_db()
+        allowed = {"status", "current_round", "max_rounds", "global_notify_count"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return False
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        status_placeholders = ", ".join("?" for _ in expected_statuses)
+        values = list(updates.values()) + [session_id, *expected_statuses]
+        cursor = await db.execute(
+            f"UPDATE world_evolutions SET {set_clause} "
+            f"WHERE evolution_id = ? AND is_deleted = 0 "
+            f"AND status IN ({status_placeholders})",
+            values,
+        )
+        await db.commit()
+        return cursor.rowcount > 0
+
     # ── 上下文操作 ──
 
     async def get_context(self, session_id: str, context_type: str) -> list[dict]:

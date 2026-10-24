@@ -260,6 +260,47 @@ class TestEvolutionStartRound:
         assert detail["status"] == "idle"
         assert detail["current_round"] == 0
 
+    def test_start_round_concurrent_second_request_409(self, client, stub_dispatcher, monkeypatch):
+        """并发交错：请求 A 通过读校验后、原子占位前，请求 B 完整执行并占位成功
+        → A 的条件 UPDATE rowcount==0 → 409，不产生双 dispatch / 轮次连跳。"""
+        from server.dependencies import get_session_manager, get_sse_manager
+        from server.routers import evolutions as evo_routes
+        from server.services.session_manager import SessionManager
+
+        uid = _login(client, "evo_round_race")
+        wid = _create_world(client, uid)
+        create_res = client.post("/api/evolutions/create", json={
+            "user_id": uid, "world_id": wid,
+        })
+        eid = create_res.json()["evolution_id"]
+
+        raced = {"done": False}
+        real_claim = SessionManager.compare_and_update
+
+        async def interleaved_claim(self, session_id, expected_statuses, **kwargs):
+            # 请求 A 首次占位前，让并发请求 B 完整跑完（读校验→占位→dispatch）
+            if not raced["done"]:
+                raced["done"] = True
+                await evo_routes.start_round(
+                    evolution_id=eid, user_id=uid,
+                    mgr=get_session_manager(), sse=get_sse_manager(),
+                )
+            return await real_claim(self, session_id, expected_statuses, **kwargs)
+
+        monkeypatch.setattr(SessionManager, "compare_and_update", interleaved_claim)
+
+        res = client.post(f"/api/evolutions/start-round?evolution_id={eid}&user_id={uid}")
+        assert res.status_code == 409
+        assert res.json()["detail"] == "当前状态不允许启动新轮次"
+
+        # 恰好一次 dispatch（B 的），轮次只自增一次
+        assert [c["agent"] for c in stub_dispatcher] == ["evolutions/start-round"]
+        assert stub_dispatcher[0]["payload"]["round"] == 1
+
+        detail = client.get(f"/api/evolutions/detail?evolution_id={eid}&user_id={uid}").json()
+        assert detail["status"] == "running"
+        assert detail["current_round"] == 1
+
 
 class TestEvolutionSelectBranch:
     def test_select_branch_writes_decision_and_resumes(self, client, stub_dispatcher):
@@ -333,6 +374,49 @@ class TestEvolutionSelectBranch:
             f"/api/evolutions/select-branch?evolution_id={eid}&user_id={uid}&branch_index=1")
         assert second.status_code == 409
 
+    def test_select_branch_concurrent_second_request_409(self, client, stub_dispatcher, monkeypatch):
+        """并发交错：请求 A 通过 PAUSED 读校验后、原子占位前，请求 B 完整执行
+        → A 的条件 UPDATE rowcount==0 → 409，不产生双 dispatch / 双 user_decision。"""
+        from server.dependencies import get_session_manager, get_sse_manager
+        from server.routers import evolutions as evo_routes
+        from server.services.session_manager import SessionManager
+        from server.storage.sqlite_client import get_db
+
+        uid = _login(client, "evo_branch_race")
+        wid = _create_world(client, uid)
+        create_res = client.post("/api/evolutions/create", json={
+            "user_id": uid, "world_id": wid,
+        })
+        eid = create_res.json()["evolution_id"]
+        _pause_with_branches(client, uid, eid)
+
+        raced = {"done": False}
+        real_claim = SessionManager.compare_and_update
+
+        async def interleaved_claim(self, session_id, expected_statuses, **kwargs):
+            if not raced["done"]:
+                raced["done"] = True
+                await evo_routes.select_branch(
+                    evolution_id=eid, user_id=uid, branch_index=1,
+                    mgr=get_session_manager(), sse=get_sse_manager(),
+                    db=await get_db(),
+                )
+            return await real_claim(self, session_id, expected_statuses, **kwargs)
+
+        monkeypatch.setattr(SessionManager, "compare_and_update", interleaved_claim)
+
+        res = client.post(
+            f"/api/evolutions/select-branch?evolution_id={eid}&user_id={uid}&branch_index=0")
+        assert res.status_code == 409
+        assert res.json()["detail"] == "当前状态不允许选择分支"
+
+        # 恰好一次 dispatch（B 的），恰好一条 user_decision
+        assert [c["agent"] for c in stub_dispatcher] == ["evolutions/select-branch"]
+        timeline = client.get(f"/api/evolutions/timeline?evolution_id={eid}&user_id={uid}").json()
+        decisions = [e for e in timeline["events"] if e["type"] == "user_decision"]
+        assert len(decisions) == 1
+        assert "分支乙" in decisions[0]["content"]
+
 
 class TestEvolutionCustomEvent:
     def test_custom_event_writes_decision_and_resumes(self, client, stub_dispatcher):
@@ -361,3 +445,33 @@ class TestEvolutionCustomEvent:
         decisions = [e for e in timeline["events"] if e["type"] == "user_decision"]
         assert len(decisions) == 1
         assert decisions[0]["content"] == "陨石坠落在城北"
+
+    def test_custom_event_bridge_unavailable_rolls_back_to_paused(self, client, monkeypatch):
+        """dispatch 失败：占位回滚为 PAUSED、不写决策，可重试。"""
+        import server.services.bridge_dispatcher as bd
+
+        async def unavailable(agent, payload, *, wait=False, timeout=None):
+            raise bd.BridgeUnavailable("桥接服务未启动")
+
+        monkeypatch.setattr(bd, "dispatch", unavailable)
+
+        uid = _login(client, "evo_custom_503")
+        wid = _create_world(client, uid)
+        create_res = client.post("/api/evolutions/create", json={
+            "user_id": uid, "world_id": wid,
+        })
+        eid = create_res.json()["evolution_id"]
+        _pause_with_branches(client, uid, eid)
+
+        res = client.post(
+            f"/api/evolutions/custom-event?evolution_id={eid}&user_id={uid}"
+            f"&event_text=陨石坠落在城北")
+        assert res.status_code == 503
+        assert "yinghui-dsh-plug bridge" in res.json()["detail"]
+
+        detail = client.get(f"/api/evolutions/detail?evolution_id={eid}&user_id={uid}").json()
+        assert detail["status"] == "paused"
+        assert detail["current_round"] == 1
+
+        timeline = client.get(f"/api/evolutions/timeline?evolution_id={eid}&user_id={uid}").json()
+        assert not [e for e in timeline["events"] if e["type"] == "user_decision"]

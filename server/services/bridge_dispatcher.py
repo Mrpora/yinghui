@@ -12,8 +12,10 @@ POST 到 bridge 对应的 agent 端点。
 - wait=False：fire-and-forget 触发，10s 超时（bridge 受理即返，执行结果
   经 SSE / 任务状态回查）；
 - wait=True：同步代理（补全/提取 oneshot），由调用方给定长超时等待 JSON；
-- 连接失败/超时 raise BridgeUnavailable，由路由层转 503。
+- 连接失败/超时/非 2xx 响应/响应体非法 JSON 一律 raise BridgeUnavailable
+  （message 附 bridge 状态码），由路由层转 503。
 """
+import json
 import logging
 
 import httpx
@@ -59,22 +61,35 @@ async def dispatch(
         timeout: 本次请求超时秒数；缺省 wait=False → 10s，wait=True 时由调用方给定。
 
     Raises:
-        BridgeUnavailable: 连接失败或超时（路由层转 503）。
+        BridgeUnavailable: 连接失败、超时、bridge 返回非 2xx 或响应体非法 JSON
+            （路由层转 503）。
     """
     if timeout is None:
         timeout = _FIRE_FORGET_TIMEOUT if not wait else 300.0
     client = _get_client()
     try:
-        resp = await client.post(f"/{agent.lstrip('/')}", json=payload, timeout=timeout)
+        resp = await client.post(
+            f"/{agent.lstrip('/')}",
+            json=payload,
+            timeout=httpx.Timeout(connect=10.0, read=timeout, write=timeout, pool=10.0),
+        )
     except (httpx.TimeoutException, httpx.TransportError) as e:
         logger.error("桥接不可达 agent=%s url=%s: %s", agent, config.BRIDGE_URL, e)
         raise BridgeUnavailable(
             f"桥接服务未启动或无响应：{config.BRIDGE_URL}（{e.__class__.__name__}）"
         ) from e
-    resp.raise_for_status()
-    if not resp.content:
-        return {}
-    return resp.json()
+    try:
+        resp.raise_for_status()
+        if not resp.content:
+            return {}
+        return resp.json()
+    except (httpx.HTTPStatusError, json.JSONDecodeError) as e:
+        # 非 2xx / 非法 JSON 不能裸穿透成 500——包装为 BridgeUnavailable（附状态码）
+        logger.error("桥接响应异常 agent=%s status=%s: %s", agent, resp.status_code, e)
+        raise BridgeUnavailable(
+            f"桥接服务响应异常：HTTP {resp.status_code}（agent={agent}，"
+            f"{e.__class__.__name__}）"
+        ) from e
 
 
 async def aclose():
