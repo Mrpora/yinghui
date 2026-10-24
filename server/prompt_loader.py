@@ -11,11 +11,20 @@ _embedding_model = None
 
 
 def preload_embedding_model():
-    """预加载 BGE-large-zh-v1.5 嵌入模型。"""
+    """预加载 BGE-large-zh-v1.5 嵌入模型。
+
+    库未安装或模型文件缺失时降级为 BM25-only（与 README 的降级语义一致），
+    不阻断启动——本地开发环境通常不装 sentence-transformers（Docker 构建才安装）。
+    """
     global _embedding_model
-    from server.services.embedding_service import load_model
-    _embedding_model = load_model()
-    logger.info("✅ 嵌入模型预加载完成")
+    try:
+        from server.services.embedding_service import load_model
+        _embedding_model = load_model()
+        logger.info("✅ 嵌入模型预加载完成")
+    except Exception as exc:  # noqa: BLE001——任何加载失败都降级，不阻断启动
+        _embedding_model = None
+        logger.warning("⚠️ 嵌入模型预加载失败，向量检索降级为 BM25-only：%s: %s",
+                       type(exc).__name__, exc)
     return _embedding_model
 
 
