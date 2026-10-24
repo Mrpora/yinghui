@@ -204,6 +204,7 @@ class TestWorlds:
             captured["agent"] = agent
             captured["payload"] = payload
             captured["wait"] = wait
+            captured["timeout"] = timeout
             return {"world_history": "", "rules": [], "initial_event": None,
                     "characters": []}
 
@@ -215,6 +216,7 @@ class TestWorlds:
         assert res.status_code == 200
         assert captured["agent"] == "worlds/complete-config"
         assert captured["wait"] is True
+        assert captured["timeout"] == 600.0    # 覆盖 bridge oneshot 最坏 3×180s≈540s + 余量
         assert captured["payload"]["character_count"] == 10    # min(10, max(3, 20))
 
     def test_complete_config_bridge_unavailable_503(self, client, monkeypatch):

@@ -425,6 +425,9 @@ class SessionManager:
         "action", "conflict", "director_path", "scene_setting", "user_decision",
         "user_intervene", "round_summary", "relationship", "branch_options",
     }
+    # 公开别名——agent_ops_service 等跨模块引用一律使用公开名；
+    # 私有名保留兼容既有引用。
+    VALID_EVENT_TYPES = _VALID_EVENT_TYPES
 
     async def append_timeline_event(self, session_id: str, event: dict):
         """追加时间线事件。"""

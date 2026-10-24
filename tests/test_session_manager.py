@@ -253,6 +253,17 @@ class TestTimelineOperations:
         assert len(events) == 1
         assert events[0]["type"] == "action"  # fallback
 
+    def test_valid_event_types_public_alias(self):
+        """防改名：公开 VALID_EVENT_TYPES 别名必须存在且含 SSE 契约词汇。
+
+        agent_ops_service 依赖该集合做事件类型校验（跨服务契约），
+        私有名 _VALID_EVENT_TYPES 仅供类内兼容，外部一律引用公开名。
+        """
+        assert hasattr(SessionManager, "VALID_EVENT_TYPES")
+        assert "user_decision" in SessionManager.VALID_EVENT_TYPES
+        # 私有名保留兼容，且与公开别名同源
+        assert SessionManager.VALID_EVENT_TYPES is SessionManager._VALID_EVENT_TYPES
+
 
 class TestRelationshipOperations:
     """测试关系图操作。"""

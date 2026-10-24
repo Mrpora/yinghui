@@ -86,7 +86,9 @@ async def complete_config(req: CompleteConfigRequest):
             "character_count": min(10, max(3, len(req.characters))),
         },
         wait=True,
-        timeout=300.0,
+        # bridge oneshot 最坏 3×180s≈540s——300s 会先 503 而 bridge 还在跑；
+        # 600s 覆盖最坏路径 + 余量（与 novels/import-characters 对齐）
+        timeout=600.0,
     )
     return CompleteConfigResponse(**result)
 

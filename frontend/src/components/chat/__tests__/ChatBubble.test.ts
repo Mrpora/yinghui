@@ -25,7 +25,8 @@ describe('ChatBubble', () => {
       },
     })
     expect(wrapper.text()).toContain('你好')
-    expect(wrapper.find('.ml-auto').exists()).toBe(true)
+    // 现实现：用户消息右对齐由外层容器 flex-row-reverse 实现（头像翻转到右侧）
+    expect(wrapper.find('.flex-row-reverse').exists()).toBe(true)
   })
 
   it('renders character message with left alignment', () => {

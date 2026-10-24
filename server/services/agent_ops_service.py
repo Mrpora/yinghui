@@ -228,7 +228,7 @@ async def write_timeline_event(
 ) -> dict:
     """写时间线事件（类型校验复用 SessionManager 现有词汇集）+ SSE timeline_event。"""
     evolution = await _require_evolution(db, evolution_id)
-    if event_type not in SessionManager._VALID_EVENT_TYPES:
+    if event_type not in SessionManager.VALID_EVENT_TYPES:
         raise HTTPException(422, f"无效的事件类型: {event_type}")
 
     event: dict = {

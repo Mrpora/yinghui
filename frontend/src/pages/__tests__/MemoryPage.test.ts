@@ -9,7 +9,7 @@ import { createApp } from 'vue'
 import { useUserStore } from '@/stores/user'
 import { useNovelStore } from '@/stores/novel'
 import { useChatStore } from '@/stores/chat'
-import { getLatestChatNovel } from '@/api/client'
+import { getLatestChatNovel, listMemories } from '@/api/client'
 
 vi.mock('@/stores/user')
 vi.mock('@/stores/novel')
@@ -60,7 +60,7 @@ describe('MemoryPage', () => {
     expect(wrapper.text()).toContain('角色记忆')
   })
 
-  it('shows prompt when no character selected', async () => {
+  it('shows empty state when no character selected', async () => {
     createTestPinia()
     vi.mocked(useUserStore).mockReturnValue({
       userId: 'u1', isLoggedIn: true,
@@ -72,6 +72,7 @@ describe('MemoryPage', () => {
       characters: [], fetchCharacters: vi.fn(),
     } as unknown as ReturnType<typeof useChatStore>)
     vi.mocked(getLatestChatNovel).mockResolvedValue({ novel_id: 'n1' })
+    vi.mocked(listMemories).mockResolvedValue({ memories: [] })
 
     const router = await createTestRouter()
     const { default: MemoryPage } = await import('../MemoryPage.vue')
@@ -79,6 +80,9 @@ describe('MemoryPage', () => {
       global: { plugins: [router] },
     })
     await flushPromises()
-    expect(wrapper.text()).toContain('选择一个角色查看记忆')
+    // 现行页面：无角色时显示小说下拉 + 空记忆占位，不出现错误横幅
+    expect(wrapper.text()).toContain('测试小说')
+    expect(wrapper.text()).toContain('暂无记忆')
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
   })
 })
