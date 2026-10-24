@@ -167,3 +167,33 @@ class TestChatStartStreamingProxy:
             f"/api/chats/start?user_id=cs_user4&novel_id=n&character_id=c"
             f"&chat_id=no_such_chat")
         assert res.status_code == 404
+
+    def test_queue_overflow_slow_client_stream_ends_with_error(
+            self, client, monkeypatch):
+        """慢客户端塞满队列 → SSEManager QueueFull 退订 → 消费循环不再有事件可读
+        → wait_for 超时发 SSE error 终结流（而非永久挂死）。
+
+        Final Review Fix Important 1：maxsize/超时为路由模块常量，测试缩小以
+        快速触发溢出与超时路径。
+        """
+        import server.routers.chats as chats_router
+        monkeypatch.setattr(chats_router, "_SSE_QUEUE_MAXSIZE", 2)
+        monkeypatch.setattr(chats_router, "_QUEUE_GET_TIMEOUT", 0.05)
+
+        uid = "cs_user5"
+        novel_id, char_id = _setup_chat_prereqs(client, uid)
+        # 广播 3 个事件：前 2 个塞满队列，第 3 个触发 QueueFull → 本队列被退订
+        _stub_flow(monkeypatch, [
+            {"event": "token", "data": {"content": "一"}},
+            {"event": "token", "data": {"content": "二"}},
+            {"event": "token", "data": {"content": "三"}},
+        ])
+
+        res = client.post(
+            f"/api/chats/start?user_id={uid}&novel_id={novel_id}&character_id={char_id}")
+        assert res.status_code == 200
+
+        events = _sse_lines(res.text)
+        # 队列内 2 个 token 转发后，队列满被退订 → 无后续事件 → 超时 error 终结
+        assert [e for e, _ in events] == ["session_created", "token", "token", "error"]
+        assert events[-1][1] == {"detail": "连接超时，请重试"}

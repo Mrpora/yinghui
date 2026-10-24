@@ -21,6 +21,13 @@ from server.storage.sqlite_client import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chats", tags=["chats"])
 
+# SSE 持流代理队列容量与等待超时（Final Review Fix Important 1）：
+# maxsize=100 在假流式 ~2.5s 即可被慢客户端塞满 → SSEManager QueueFull 退订 →
+# 消费循环 queue.get() 永久阻塞。提到 10_000 大幅抬高溢出阈值；消费循环加
+# wait_for 超时兜底——超时发 SSE error（终结流）而非永久挂死。
+_SSE_QUEUE_MAXSIZE = 10_000
+_QUEUE_GET_TIMEOUT = 60.0
+
 
 # ── 角色列表 ──
 
@@ -91,7 +98,7 @@ async def start_chat(
         await db.commit()
 
     # 3. 订阅先于触发（bridge 早期阶段事件不丢）；bridge 不可达在开流前 503
-    queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+    queue: asyncio.Queue = asyncio.Queue(maxsize=_SSE_QUEUE_MAXSIZE)
     channel = f"chat:{chat_id}"
     sse.subscribe(channel, queue)
     try:
@@ -111,7 +118,15 @@ async def start_chat(
             if is_new:
                 yield f"event: session_created\ndata: {{\"chat_id\": \"{chat_id}\"}}\n\n"
             while True:
-                event = await queue.get()
+                try:
+                    event = await asyncio.wait_for(
+                        queue.get(), timeout=_QUEUE_GET_TIMEOUT)
+                except asyncio.TimeoutError:
+                    # 慢客户端塞满队列被 SSEManager 退订后 get() 永不就绪——
+                    # 超时发 error 终结流（不终止则前端 SSE 永久挂死）
+                    logger.warning("对话 SSE 等待事件超时，终结流 chat=%s", chat_id)
+                    yield 'event: error\ndata: {"detail": "连接超时，请重试"}\n\n'
+                    break
                 event_type = event.get("event", "message")
                 data = json.dumps(event.get("data", event), ensure_ascii=False)
                 yield f"event: {event_type}\ndata: {data}\n\n"

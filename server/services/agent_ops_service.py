@@ -31,6 +31,17 @@ from server.services.session_manager import SessionManager, SessionStatus
 
 logger = logging.getLogger(__name__)
 
+# JSON 列读-改-写进程内锁（Final Review Fix Important 3）：_append_timeline/
+# relationships/character_contexts/chat messages 四处 SELECT→append→UPDATE 若
+# 无锁交错会丢更新。所有写者（路由/bridge/MCP）都经 yinghui API 收敛到同一进程，
+# 进程内按资源键加锁即完备（同 plug T4 flows._lock_for 先例）。
+_locks: dict[str, asyncio.Lock] = {}
+
+
+def _lock_for(key: str) -> asyncio.Lock:
+    return _locks.setdefault(key, asyncio.Lock())
+
+
 # SSE 通道前缀（与前端既有订阅契约一致）
 def evolution_channel(evolution_id: str) -> str:
     return f"evolution:{evolution_id}"
@@ -143,21 +154,22 @@ def _character_view(row: dict) -> dict:
 
 
 async def _append_timeline(db, evolution_id: str, event: dict) -> None:
-    """追加时间线事件并持久化。"""
-    cursor = await db.execute(
-        "SELECT timeline FROM world_evolutions WHERE evolution_id = ? AND is_deleted = 0",
-        (evolution_id,),
-    )
-    row = await cursor.fetchone()
-    if row is None:
-        raise HTTPException(404, "演化会话不存在")
-    timeline = _loads(row["timeline"], [])
-    timeline.append(event)
-    await db.execute(
-        "UPDATE world_evolutions SET timeline = ? WHERE evolution_id = ?",
-        (json.dumps(timeline, ensure_ascii=False), evolution_id),
-    )
-    await db.commit()
+    """追加时间线事件并持久化（锁内完成读-改-写，防并发丢更新）。"""
+    async with _lock_for(f"evolution:{evolution_id}"):
+        cursor = await db.execute(
+            "SELECT timeline FROM world_evolutions WHERE evolution_id = ? AND is_deleted = 0",
+            (evolution_id,),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            raise HTTPException(404, "演化会话不存在")
+        timeline = _loads(row["timeline"], [])
+        timeline.append(event)
+        await db.execute(
+            "UPDATE world_evolutions SET timeline = ? WHERE evolution_id = ?",
+            (json.dumps(timeline, ensure_ascii=False), evolution_id),
+        )
+        await db.commit()
 
 
 async def _update_evolution_status(db, evolution_id: str, status: str) -> None:
@@ -265,18 +277,28 @@ async def write_round_summary(db, sse, evolution_id: str, round_number: int,
 
 
 async def update_relationships(db, sse, evolution_id: str, edges: list[dict]) -> dict:
-    """合并关系边进 relationships JSON + SSE relationships（全量边广播）。"""
-    evolution = await _require_evolution(db, evolution_id)
-    relationships = _loads(evolution["relationships"], {})
-    for edge in edges:
-        relationships.setdefault(edge["from_character"], {})[edge["to_character"]] = \
-            edge["description"]
+    """合并关系边进 relationships JSON + SSE relationships（全量边广播）。
 
-    await db.execute(
-        "UPDATE world_evolutions SET relationships = ? WHERE evolution_id = ?",
-        (json.dumps(relationships, ensure_ascii=False), evolution_id),
-    )
-    await db.commit()
+    relationships 读-改-写在 `evolution:{eid}` 锁内完成（防并发丢更新）；
+    SSE 广播在锁外（锁内不 await 其他资源操作）。
+    """
+    await _require_evolution(db, evolution_id)
+    async with _lock_for(f"evolution:{evolution_id}"):
+        cursor = await db.execute(
+            "SELECT relationships FROM world_evolutions WHERE evolution_id = ?",
+            (evolution_id,),
+        )
+        row = await cursor.fetchone()
+        relationships = _loads(row["relationships"] if row is not None else None, {})
+        for edge in edges:
+            relationships.setdefault(edge["from_character"], {})[edge["to_character"]] = \
+                edge["description"]
+
+        await db.execute(
+            "UPDATE world_evolutions SET relationships = ? WHERE evolution_id = ?",
+            (json.dumps(relationships, ensure_ascii=False), evolution_id),
+        )
+        await db.commit()
 
     all_edges = [
         {"from": from_char, "to": to_char, "relationship": rel}
@@ -417,18 +439,27 @@ async def get_character_context(db, evolution_id: str, name: str) -> list[dict]:
 
 async def append_character_context(db, evolution_id: str, name: str,
                                    message: str) -> list[dict]:
-    """追加角色上下文（system 消息）并持久化——MCP 写入的落点。"""
+    """追加角色上下文（system 消息）并持久化——MCP 写入的落点。
+
+    character_contexts 读-改-写在 `evolution:{eid}` 锁内完成（防并发丢更新）。
+    """
     evolution = await _require_evolution(db, evolution_id)
     await _require_world_character(db, evolution, name)
-    contexts = _loads(evolution["character_contexts"], {})
-    messages = contexts.get(name, [])
-    messages.append({"role": "system", "content": message})
-    contexts[name] = messages
-    await db.execute(
-        "UPDATE world_evolutions SET character_contexts = ? WHERE evolution_id = ?",
-        (json.dumps(contexts, ensure_ascii=False), evolution_id),
-    )
-    await db.commit()
+    async with _lock_for(f"evolution:{evolution_id}"):
+        cursor = await db.execute(
+            "SELECT character_contexts FROM world_evolutions WHERE evolution_id = ?",
+            (evolution_id,),
+        )
+        row = await cursor.fetchone()
+        contexts = _loads(row["character_contexts"] if row is not None else None, {})
+        messages = contexts.get(name, [])
+        messages.append({"role": "system", "content": message})
+        contexts[name] = messages
+        await db.execute(
+            "UPDATE world_evolutions SET character_contexts = ? WHERE evolution_id = ?",
+            (json.dumps(contexts, ensure_ascii=False), evolution_id),
+        )
+        await db.commit()
     return messages
 
 
@@ -570,13 +601,16 @@ async def append_chat_message(db, chat_id: str, message: dict) -> dict:
     entry = {**message, "role": role, "content": content}
     entry.setdefault("timestamp", now_ms())
 
-    messages = _loads(chat["messages"], [])
-    messages.append(entry)
-    await db.execute(
-        "UPDATE character_chats SET messages = ?, modified_at = ? WHERE chat_id = ?",
-        (json.dumps(messages, ensure_ascii=False), now_ms(), chat_id),
-    )
-    await db.commit()
+    async with _lock_for(f"chat:{chat_id}"):
+        # 锁内重读 messages（entry 校验用的 chat 行可能已过期）——读-改-写原子
+        fresh = await _require_chat(db, chat_id)
+        messages = _loads(fresh["messages"], [])
+        messages.append(entry)
+        await db.execute(
+            "UPDATE character_chats SET messages = ?, modified_at = ? WHERE chat_id = ?",
+            (json.dumps(messages, ensure_ascii=False), now_ms(), chat_id),
+        )
+        await db.commit()
     return {"ok": True}
 
 
@@ -603,20 +637,24 @@ async def chat_done(db, sse, chat_id: str, character_message: dict) -> dict:
     if not isinstance(content, str):
         raise HTTPException(422, "character_message.content 必须为字符串")
 
-    messages = _loads(chat["messages"], [])
-    round_num = sum(1 for m in messages if m.get("role") == "character") + 1
-    character_msg = {
-        "role": "character",
-        "content": content,
-        "timestamp": now_ms(),
-        "round": round_num,
-    }
-    messages.append(character_msg)
-    await db.execute(
-        "UPDATE character_chats SET messages = ?, modified_at = ? WHERE chat_id = ?",
-        (json.dumps(messages, ensure_ascii=False), now_ms(), chat_id),
-    )
-    await db.commit()
+    async with _lock_for(f"chat:{chat_id}"):
+        # 消息读-改-写在 `chat:{cid}` 锁内完成（防并发丢更新）；
+        # 锁内不做 SSE 广播/其他资源 await
+        fresh = await _require_chat(db, chat_id)
+        messages = _loads(fresh["messages"], [])
+        round_num = sum(1 for m in messages if m.get("role") == "character") + 1
+        character_msg = {
+            "role": "character",
+            "content": content,
+            "timestamp": now_ms(),
+            "round": round_num,
+        }
+        messages.append(character_msg)
+        await db.execute(
+            "UPDATE character_chats SET messages = ?, modified_at = ? WHERE chat_id = ?",
+            (json.dumps(messages, ensure_ascii=False), now_ms(), chat_id),
+        )
+        await db.commit()
 
     channel = chat_channel(chat_id)
     i = 0

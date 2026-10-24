@@ -11,7 +11,6 @@ from tests.helpers import make_characters
 def isolate_db(tmp_path, monkeypatch):
     db_path = str(tmp_path / "test.db")
     monkeypatch.setenv("SQLITE_PATH", db_path)
-    monkeypatch.setenv("LLM_API_KEY", "sk-test-settings")
 
     import server.config as cfg
     monkeypatch.setattr(cfg.config, "SQLITE_PATH", db_path)

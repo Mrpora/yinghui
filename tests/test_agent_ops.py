@@ -752,3 +752,41 @@ class TestCareEcho:
             "user_id": uid, "novel_id": novel_id,
             "character_id": "no-such-char"})
         assert res.status_code == 404
+
+
+# ═══════════════════════════════════════════════════════════
+# 并发（Final Review Fix Important 3：JSON 列读-改-写进程内锁）
+# ═══════════════════════════════════════════════════════════
+
+class TestConcurrentJsonWrites:
+    def test_concurrent_timeline_appends_no_loss(self, client):
+        """多 task 交错 append 同一 timeline → 全部落库不丢。
+
+        直调服务层 _append_timeline（aiosqlite 每次 execute 经线程跳转让出
+        事件循环，天然交错；无锁时读-改-写会互相覆盖丢更新）。
+        """
+        uid = _login(client, "ao_conc1")
+        wid = _create_world(client, uid)
+        eid = _create_evolution(client, uid, wid)
+
+        from server.services import agent_ops_service as ops
+
+        async def _run():
+            from server.storage.sqlite_client import get_db
+            db = await get_db()
+            await asyncio.gather(*[
+                ops._append_timeline(
+                    db, eid, {"type": "scene_setting", "round": 0,
+                              "content": f"并发事件{i}"})
+                for i in range(10)
+            ])
+
+        asyncio.run(_run())
+
+        row = _sql(
+            "SELECT timeline FROM world_evolutions WHERE evolution_id = ?",
+            (eid,))[0]
+        timeline = json.loads(row["timeline"])
+        assert len(timeline) == 10
+        assert sorted(e["content"] for e in timeline) == \
+            sorted(f"并发事件{i}" for i in range(10))

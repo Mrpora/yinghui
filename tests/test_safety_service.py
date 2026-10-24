@@ -10,14 +10,12 @@ from unittest.mock import MagicMock
 class TestSendAlert:
     def test_send_alert_returns_success(self, monkeypatch):
         """send_alert 应返回成功状态。"""
-        monkeypatch.setenv("LLM_API_KEY", "sk-test")
         from server.services.safety_service import send_alert
         result = send_alert("测试用户", "我很难过", "极端情绪检测")
         assert result == {"status": "success"}
 
     def test_send_alert_writes_to_log_file(self, tmp_path, monkeypatch):
         """send_alert 应写入安全日志文件。"""
-        monkeypatch.setenv("LLM_API_KEY", "sk-test")
         import server.services.safety_service as ss
         monkeypatch.setattr(ss, "LOG_DIR", tmp_path)
 
@@ -36,7 +34,6 @@ class TestSendAlert:
 
     def test_send_alert_logger_cached(self, monkeypatch):
         """第二次调用应复用已缓存的 logger。"""
-        monkeypatch.setenv("LLM_API_KEY", "sk-test")
         import server.services.safety_service as ss
         ss._alert_logger = None
 

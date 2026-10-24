@@ -13,7 +13,6 @@ def isolate_db(tmp_path, monkeypatch):
     """使用临时数据库，通过环境变量隔离。"""
     db_path = str(tmp_path / "test.db")
     monkeypatch.setenv("SQLITE_PATH", db_path)
-    monkeypatch.setenv("LLM_API_KEY", "sk-test")
 
     import server.config as cfg
     monkeypatch.setattr(cfg.config, "SQLITE_PATH", db_path)
