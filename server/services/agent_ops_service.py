@@ -586,6 +586,12 @@ async def emit_chat_stage(db, sse, chat_id: str, stage: str) -> None:
     await sse.broadcast(chat_channel(chat_id), {"event": stage, "data": {}})
 
 
+async def emit_chat_error(db, sse, chat_id: str, message: str) -> None:
+    """发聊天错误事件（SSE error，终结 chats/start 持流代理；bridge 治理路径用）。"""
+    await _require_chat(db, chat_id)
+    await sse.broadcast(chat_channel(chat_id), {"event": "error", "data": {"message": message}})
+
+
 async def chat_done(db, sse, chat_id: str, character_message: dict) -> dict:
     """持久化角色消息 + 2-4 字符随机分块（sleep 0.02-0.06s）广播 SSE token* + done。
 

@@ -543,6 +543,31 @@ class TestChatFlow:
         assert messages[-1]["role"] == "character"
         assert messages[-1]["content"] == text
 
+    def test_chat_error_stream(self, client):
+        """POST /chats/{cid}/error → SSE error 事件（终结持流代理；bridge 治理路径）。"""
+        uid = "ao_chat_user_err"
+        novel_id, character_id = _setup_chat_prereqs(client, uid)
+        cid = _create_chat(uid, novel_id, character_id)
+
+        with SSECollector(get_sse(), f"chat:{cid}") as col:
+            res = client.post(f"/api/agent/chats/{cid}/error",
+                              json={"message": "对话回合超时"})
+            assert res.status_code == 200, res.text
+            events = col.drain()
+        assert len(events) == 1
+        assert events[0]["event"] == "error"
+        assert events[0]["data"] == {"message": "对话回合超时"}
+
+        # 不落库：历史不含 error
+        res = client.get(f"/api/agent/chats/{cid}/history?last_n=20")
+        assert res.status_code == 200
+        assert res.json()["messages"] == []
+
+        # 对话不存在 → 404
+        res = client.post("/api/agent/chats/no-such-cid/error",
+                          json={"message": "x"})
+        assert res.status_code == 404
+
     def test_chat_append_message_and_history(self, client):
         uid = "ao_chat_user2"
         novel_id, character_id = _setup_chat_prereqs(client, uid)

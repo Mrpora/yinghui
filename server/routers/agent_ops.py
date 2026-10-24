@@ -105,6 +105,10 @@ class ChatStageRequest(BaseModel):
     stage: Literal["thinking", "retrieving", "memorizing"]
 
 
+class ChatErrorRequest(BaseModel):
+    message: str
+
+
 class ChatDoneRequest(BaseModel):
     character_message: dict
 
@@ -318,6 +322,16 @@ async def emit_chat_stage(
 ):
     """发聊天阶段事件（SSE thinking/retrieving/memorizing）。"""
     await svc.emit_chat_stage(db, sse, chat_id, req.stage)
+    return {"ok": True}
+
+
+@router.post("/chats/{chat_id}/error")
+async def emit_chat_error(
+    chat_id: str, req: ChatErrorRequest,
+    db=Depends(get_db), sse=Depends(get_sse_manager),
+):
+    """发聊天错误事件（SSE error，终结 chats/start 持流代理；bridge 治理路径用）。"""
+    await svc.emit_chat_error(db, sse, chat_id, req.message)
     return {"ok": True}
 
 
