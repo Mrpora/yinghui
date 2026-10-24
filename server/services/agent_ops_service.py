@@ -230,6 +230,11 @@ async def write_timeline_event(
     evolution = await _require_evolution(db, evolution_id)
     if event_type not in SessionManager.VALID_EVENT_TYPES:
         raise HTTPException(422, f"无效的事件类型: {event_type}")
+    if event_type in ("user_decision", "user_intervene"):
+        # 用户专属事件：只能经 select-branch / custom-event / intervene 路由由用户写入，
+        # 防 agent 在 MCP 面自导自演用户决策
+        raise HTTPException(
+            409, f"事件类型 {event_type} 为用户专属，agent 不得写入")
 
     event: dict = {
         "type": event_type,
@@ -378,6 +383,11 @@ async def complete_round(db, sse, evolution_id: str) -> dict:
     evolution = await _require_evolution(db, evolution_id)
     current = int(evolution["current_round"])
     max_rounds = int(evolution["max_rounds"])
+    status = str(evolution.get("status", ""))
+    if status == "paused":
+        # 冲突分支已推、等待用户决策——禁止导演跳过用户收束回合
+        # （防自导自演：select-branch/custom-event 置 RUNNING 后才允许收束）
+        raise HTTPException(status_code=409, detail="演化已暂停：请先选择分支或注入自定义事件，再收束回合")
 
     if current >= max_rounds:
         await _update_evolution_status(db, evolution_id, SessionStatus.ENDED.value)
