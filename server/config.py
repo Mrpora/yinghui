@@ -50,6 +50,9 @@ class Config:
 
         # ── 桥接（yinghui-dsh-plug bridge） ──
         self.BRIDGE_URL: str = os.getenv("BRIDGE_URL", "http://127.0.0.1:8100")
+        # /api/agent/* 共享 token（横切鉴权）：空=开放（零配置启动/selftest 不变）；
+        # 非空时全部 /api/agent/* 端点要求请求头 X-Agent-Token 匹配（失配 401）
+        self.AGENT_TOKEN: str = os.getenv("AGENT_TOKEN", "")
 
         # ── 小说（precheck 硬门用） ──
         self.NOVEL_CHAPTER_MIN_CHARS: int = _int_env("NOVEL_CHAPTER_MIN_CHARS", 3000)

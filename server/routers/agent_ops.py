@@ -3,22 +3,43 @@
 
 """agent_ops 路由——/api/agent/* 全量领域操作接口（MCP server 与桥接进程回写用）。
 
-仅回环使用、无鉴权。逐端点薄壳：meta 级存在性校验与业务逻辑全部在
-agent_ops_service（依赖经 Depends 显式注入，服务层无模块级单例）。
+仅回环使用；可选共享 token 鉴权（env ``AGENT_TOKEN``，默认空=开放，零配置启动与
+selftest 不变；非空时全部端点要求请求头 ``X-Agent-Token`` 匹配，失配 401——
+router 级 dependency 一处声明全路由生效，debt-wave3 W1）。逐端点薄壳：meta 级
+存在性校验与业务逻辑全部在 agent_ops_service（依赖经 Depends 显式注入，服务层
+无模块级单例）。
 SSE 词汇冻结：演化 round_start/timeline_event/branches/session_paused/
 round_end/session_ended/relationships；聊天 thinking/retrieving/memorizing/
 token/done/error。
 """
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from server.config import config
 from server.dependencies import get_sse_manager
 from server.services import agent_ops_service as svc
 from server.storage.sqlite_client import get_db
 
-router = APIRouter(prefix="/api/agent", tags=["agent-ops"])
+
+async def require_agent_token(x_agent_token: str | None = Header(default=None)) -> None:
+    """AGENT_TOKEN 非空时校验 ``X-Agent-Token`` 请求头（横切，不改任何端点语义）。
+
+    预期值每次请求从 config 读取（测试可 monkeypatch）；默认空=直接放行。
+    """
+    expected = config.AGENT_TOKEN
+    if not expected:
+        return
+    if x_agent_token != expected:
+        raise HTTPException(
+            status_code=401,
+            detail="agent 访问未授权：请设置请求头 X-Agent-Token 为 yinghui 侧 "
+                   "AGENT_TOKEN 配置的共享令牌")
+
+
+router = APIRouter(prefix="/api/agent", tags=["agent-ops"],
+                   dependencies=[Depends(require_agent_token)])
 
 
 # ── 请求模型 ──

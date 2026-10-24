@@ -231,6 +231,7 @@ yinghui/
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
 | `BRIDGE_URL` | yinghui-dsh-plug bridge 地址（agent 编排所在的外部进程） | `http://127.0.0.1:8100` |
+| `AGENT_TOKEN` | `/api/agent/*` 共享 token（可选）：非空时该前缀全部端点要求请求头 `X-Agent-Token` 匹配（失配 401），用于消除局域网暴露面；须与 plug 侧 `AGENT_TOKEN` 一致。默认空=不鉴权，零配置启动不变 | （空） |
 
 </details>
 
