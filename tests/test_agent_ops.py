@@ -790,3 +790,92 @@ class TestConcurrentJsonWrites:
         assert len(timeline) == 10
         assert sorted(e["content"] for e in timeline) == \
             sorted(f"并发事件{i}" for i in range(10))
+
+    def test_route_session_manager_vs_agent_ops_timeline_no_loss(self, client):
+        """Round 2 I3 补漏：路由侧经 session_manager.append_timeline_event 的
+        RMW（select-branch/custom-event/intervene 写点，路由层以共享注册表
+        `evolution:{eid}` 键包锁）与 agent_ops _append_timeline（bridge/MCP
+        写点，服务层同键包锁）交错 → 两条都落库不丢。"""
+        uid = _login(client, "ao_conc2")
+        wid = _create_world(client, uid)
+        eid = _create_evolution(client, uid, wid)
+
+        from server.services import agent_ops_service as ops
+        from server.services._resource_locks import lock_for
+        from server.services.session_manager import SessionManager
+
+        mgr = SessionManager()
+
+        async def _run():
+            from server.storage.sqlite_client import get_db
+            db = await get_db()
+
+            # 路由等价写点：共享锁包 session_manager RMW（与 evolutions.py 同形）
+            async def route_write():
+                async with lock_for(f"evolution:{eid}"):
+                    await mgr.append_timeline_event(
+                        eid, {"type": "user_decision", "round": 0,
+                              "content": "路由选择分支"})
+
+            # bridge/MCP 等价写点：agent_ops 服务层内部同键包锁
+            async def ops_write():
+                await ops._append_timeline(
+                    db, eid, {"type": "scene_setting", "round": 0,
+                              "content": "agent_ops 时间线事件"})
+
+            await asyncio.gather(route_write(), ops_write())
+
+        asyncio.run(_run())
+
+        row = _sql(
+            "SELECT timeline FROM world_evolutions WHERE evolution_id = ?",
+            (eid,))[0]
+        contents = [e["content"] for e in json.loads(row["timeline"])]
+        assert sorted(contents) == ["agent_ops 时间线事件", "路由选择分支"]
+
+    def test_chats_route_user_message_vs_chat_done_no_loss(self, client):
+        """Round 2 I3 补漏：路由 chats/start 用户消息落库 RMW（路由层以共享
+        注册表 `chat:{cid}` 键包锁）与 agent_ops chat_done（bridge 写角色消息
+        落库，服务层同键包锁）交错 → 两条消息都落库不丢。"""
+        uid = _login(client, "ao_conc3")
+        novel_id, character_id = _setup_chat_prereqs(client, uid)
+        from server.storage.sqlite_client import create_chat
+        chat_id = _create_chat(uid, novel_id, character_id)
+
+        from server.services import agent_ops_service as ops
+        from server.services._resource_locks import lock_for
+
+        async def _run():
+            from server.storage.sqlite_client import get_db
+            db = await get_db()
+
+            # 路由等价写点：共享锁包用户消息 RMW（与 routers/chats.py 同形）
+            async def route_write():
+                async with lock_for(f"chat:{chat_id}"):
+                    cursor = await db.execute(
+                        "SELECT messages FROM character_chats WHERE chat_id = ?",
+                        (chat_id,))
+                    row = await cursor.fetchone()
+                    messages = json.loads(row["messages"] or "[]") if row else []
+                    messages.append({"role": "user", "content": "用户消息",
+                                     "timestamp": 0, "round": 1})
+                    await db.execute(
+                        "UPDATE character_chats SET messages = ? WHERE chat_id = ?",
+                        (json.dumps(messages, ensure_ascii=False), chat_id))
+                    await db.commit()
+
+            # bridge 等价写点：agent_ops chat_done（角色消息落库 + SSE 广播）
+            async def ops_write():
+                await ops.chat_done(
+                    db, get_sse(), chat_id,
+                    {"role": "character", "content": "角色回复"})
+
+            await asyncio.gather(route_write(), ops_write())
+
+        asyncio.run(_run())
+
+        row = _sql(
+            "SELECT messages FROM character_chats WHERE chat_id = ?", (chat_id,))[0]
+        messages = json.loads(row["messages"])
+        roles = sorted(m["role"] for m in messages)
+        assert roles == ["character", "user"]

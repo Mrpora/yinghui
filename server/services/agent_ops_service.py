@@ -28,18 +28,12 @@ from fastapi import HTTPException
 from server.config import config
 from server.storage.sqlite_client import now_ms
 from server.services.session_manager import SessionManager, SessionStatus
+# JSON 列读-改-写进程内锁（Final Review Fix Important 3；Round 2 提升注册表至
+# server/services/_resource_locks.py 供路由层共用——路由侧用户消息落库与
+# select-branch/custom-event/intervene 写时间线与本模块竞争同一 JSON 列）。
+from server.services._resource_locks import lock_for as _lock_for
 
 logger = logging.getLogger(__name__)
-
-# JSON 列读-改-写进程内锁（Final Review Fix Important 3）：_append_timeline/
-# relationships/character_contexts/chat messages 四处 SELECT→append→UPDATE 若
-# 无锁交错会丢更新。所有写者（路由/bridge/MCP）都经 yinghui API 收敛到同一进程，
-# 进程内按资源键加锁即完备（同 plug T4 flows._lock_for 先例）。
-_locks: dict[str, asyncio.Lock] = {}
-
-
-def _lock_for(key: str) -> asyncio.Lock:
-    return _locks.setdefault(key, asyncio.Lock())
 
 
 # SSE 通道前缀（与前端既有订阅契约一致）

@@ -11,6 +11,8 @@ from fastapi.responses import StreamingResponse
 
 from server.dependencies import get_sse_manager
 from server.routers._dispatch import dispatch_or_503
+# JSON 列读-改-写进程内锁（Round 2 I3 补漏——注册表与 agent_ops_service 共用）
+from server.services._resource_locks import lock_for as _lock_for
 from server.storage.sqlite_client import (
     now_ms,
     get_db, create_chat, get_chat, list_chats as db_list_chats, get_chat_messages,
@@ -21,12 +23,16 @@ from server.storage.sqlite_client import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/chats", tags=["chats"])
 
-# SSE 持流代理队列容量与等待超时（Final Review Fix Important 1）：
+# SSE 持流代理队列容量与等待超时（Final Review Fix Important 1；Round 2 误伤修正）：
 # maxsize=100 在假流式 ~2.5s 即可被慢客户端塞满 → SSEManager QueueFull 退订 →
 # 消费循环 queue.get() 永久阻塞。提到 10_000 大幅抬高溢出阈值；消费循环加
 # wait_for 超时兜底——超时发 SSE error（终结流）而非永久挂死。
+# 超时取 300s（Round 2）：thinking 后直到首个假流式 token 之间的静默窗 ≈ 完整
+# DSH 生成时长，须覆盖 plug 侧 TIMEOUT_CHAT=240s 加余量——取 60s 会把 >60s 的
+# 正常长回复误报为 error（flow 实际跑完并落库，仅前端误伤）。调整 plug
+# TIMEOUT_CHAT 时须联动上调本值（> TIMEOUT_CHAT + 余量）。
 _SSE_QUEUE_MAXSIZE = 10_000
-_QUEUE_GET_TIMEOUT = 60.0
+_QUEUE_GET_TIMEOUT = 300.0
 
 
 # ── 角色列表 ──
@@ -80,22 +86,25 @@ async def start_chat(
         if existing is None:
             raise HTTPException(404, "对话不存在")
 
-    # 2. 用户消息先落库（行为改进：flow 失败重载后消息保留可重发）
+    # 2. 用户消息先落库（行为改进：flow 失败重载后消息保留可重发）。
+    #    读-改-写包 `chat:{cid}` 进程内锁（Round 2 I3 补漏）：与 bridge/MCP 经
+    #    agent_ops append_chat_message / chat_done 竞争同一 messages JSON 列。
     if content:
-        cursor = await db.execute(
-            "SELECT messages FROM character_chats WHERE chat_id = ?", (chat_id,))
-        row = await cursor.fetchone()
-        messages = json.loads(row["messages"] or "[]") if row else []
-        round_num = sum(1 for m in messages if m.get("role") == "character") + 1
-        messages.append({
-            "role": "user", "content": content,
-            "timestamp": now_ms(), "round": round_num,
-        })
-        await db.execute(
-            "UPDATE character_chats SET messages = ?, modified_at = ? WHERE chat_id = ?",
-            (json.dumps(messages, ensure_ascii=False), now_ms(), chat_id),
-        )
-        await db.commit()
+        async with _lock_for(f"chat:{chat_id}"):
+            cursor = await db.execute(
+                "SELECT messages FROM character_chats WHERE chat_id = ?", (chat_id,))
+            row = await cursor.fetchone()
+            messages = json.loads(row["messages"] or "[]") if row else []
+            round_num = sum(1 for m in messages if m.get("role") == "character") + 1
+            messages.append({
+                "role": "user", "content": content,
+                "timestamp": now_ms(), "round": round_num,
+            })
+            await db.execute(
+                "UPDATE character_chats SET messages = ?, modified_at = ? WHERE chat_id = ?",
+                (json.dumps(messages, ensure_ascii=False), now_ms(), chat_id),
+            )
+            await db.commit()
 
     # 3. 订阅先于触发（bridge 早期阶段事件不丢）；bridge 不可达在开流前 503
     queue: asyncio.Queue = asyncio.Queue(maxsize=_SSE_QUEUE_MAXSIZE)

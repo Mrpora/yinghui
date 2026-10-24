@@ -32,6 +32,7 @@ from server.dependencies import (
 )
 from server.routers._dispatch import dispatch_or_503
 from server.services import agent_ops_service as agent_svc
+from server.services._resource_locks import lock_for
 from server.storage.sqlite_client import get_db
 
 logger = logging.getLogger(__name__)
@@ -197,13 +198,16 @@ async def select_branch(
         raise
 
     # dispatch 成功：写 user_decision 时间线事件 + SSE
+    # （RMW 包 `evolution:{eid}` 进程内锁——Round 2 I3 补漏：与 bridge/MCP 经
+    #  agent_ops _append_timeline 竞争同一 timeline JSON 列）
     decision_event = {
         "type": "user_decision",
         "content": f"用户选择了第 {branch_index} 条分支「{branch.get('title', '')}」：{branch.get('description', '')}",
         "round": s.current_round,
         "branch_index": branch_index,
     }
-    await mgr.append_timeline_event(evolution_id, decision_event)
+    async with lock_for(f"evolution:{evolution_id}"):
+        await mgr.append_timeline_event(evolution_id, decision_event)
     await sse.broadcast(f"evolution:{evolution_id}", {
         "type": "timeline_event",
         "data": {"event": decision_event},
@@ -252,12 +256,14 @@ async def custom_event(
         raise
 
     # dispatch 成功：写 user_decision 时间线事件（文本原样入参）+ SSE
+    # （RMW 包 `evolution:{eid}` 进程内锁——Round 2 I3 补漏，同 select-branch）
     decision_event = {
         "type": "user_decision",
         "content": event_text,
         "round": s.current_round,
     }
-    await mgr.append_timeline_event(evolution_id, decision_event)
+    async with lock_for(f"evolution:{evolution_id}"):
+        await mgr.append_timeline_event(evolution_id, decision_event)
     await sse.broadcast(f"evolution:{evolution_id}", {
         "type": "timeline_event",
         "data": {"event": decision_event},
@@ -285,7 +291,9 @@ async def round_intervene(
     event_dict = {
         "type": "user_intervene", "content": summary, "round": s.current_round,
     }
-    await mgr.append_timeline_event(evolution_id, event_dict)
+    # RMW 包 `evolution:{eid}` 进程内锁——Round 2 I3 补漏（同 select-branch）
+    async with lock_for(f"evolution:{evolution_id}"):
+        await mgr.append_timeline_event(evolution_id, event_dict)
     await sse.broadcast(f"evolution:{evolution_id}", {
         "type": "timeline_event",
         "data": {"event": event_dict},
