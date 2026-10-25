@@ -71,8 +71,15 @@ async def start_novel_generation(
         "rules": world.get("rules", "[]"),
     }
 
+    # 并发守卫：同演化已有 processing 任务时拒绝重复生成
+    # （断点续写复用判定与 dispatch 之间的窗口不再产生双写同一任务）
+    in_flight = await get_processing_task_by_evolution(evolution_id)
+    if in_flight:
+        raise HTTPException(
+            409, detail="该演化已有进行中的小说生成任务，请等待完成或失败后再试")
+
     # 断点续写判定：同演化最新 failed 任务 + 章节目录留存 → 复用；否则新建
-    prev = await get_latest_failed_task_by_evolution(evolution_id)
+    prev = await get_latest_failed_task_by_evolution(evolution_id, user_id)
     reused = prev is not None and task_has_chapters(prev["task_id"])
     if reused:
         task_id = prev["task_id"]

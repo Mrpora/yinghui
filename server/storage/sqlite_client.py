@@ -549,18 +549,19 @@ async def get_latest_novel_task_status(novel_id: str) -> str | None:
     return row["status"] if row else None
 
 
-async def get_latest_failed_task_by_evolution(evolution_id: str) -> dict | None:
+async def get_latest_failed_task_by_evolution(evolution_id: str, user_id: str) -> dict | None:
     """断点续写：取某演化记录最新的 failed 任务（排除已软删除的小说；无则 None）。
 
     只查任务行；章节目录是否留存由调用方（novels generate 路由）核验后决定复用。
+    user_id 过滤防跨用户复用他属任务。
     """
     conn = await get_db()
     cursor = await conn.execute(
         "SELECT nt.* FROM novel_tasks nt "
         "JOIN novels n ON n.novel_id = nt.novel_id AND n.is_deleted = 0 "
-        "WHERE nt.evolution_id = ? AND nt.status = 'failed' "
+        "WHERE nt.evolution_id = ? AND n.user_id = ? AND nt.status = 'failed' "
         "ORDER BY nt.created_at DESC LIMIT 1",
-        (evolution_id,),
+        (evolution_id, user_id),
     )
     row = await cursor.fetchone()
     return dict(row) if row else None

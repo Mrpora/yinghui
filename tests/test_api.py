@@ -318,6 +318,57 @@ def _query_db(sql: str, params: tuple = ()) -> list[dict]:
 
 
 class TestNovelsGenerate:
+    def test_generate_rejects_when_processing_exists(self, client):
+        """并发守卫：同演化已有 processing 任务 → 409，不新建行也不 dispatch。"""
+        import asyncio
+        import server.services.bridge_dispatcher as bd
+
+        dispatched = []
+        monkey_ok = True
+
+        uid = _login(client, "novel_guard")
+        res = client.post("/api/worlds/create", json={
+            "user_id": uid, "name": "守卫世界", "description": "",
+            "world_history": "", "rules": [],
+            "initial_event": {"content": "", "time": ""},
+            "characters": make_characters(3),
+        })
+        wid = res.json()["world_id"]
+        evo = client.post("/api/evolutions/create", json={"user_id": uid, "world_id": wid})
+        eid = evo.json()["evolution_id"]
+
+        # 直接在库中预置一个 processing 任务（模拟另一请求已受理）
+        from server.storage.sqlite_client import get_db
+
+        async def _seed_processing():
+            db = await get_db()
+            await db.execute(
+                "INSERT INTO novels (novel_id, user_id, world_id, evolution_id, title,"
+                " content, world_snapshot, created_at, is_deleted)"
+                " VALUES ('novel_guard', ?, ?, ?, '守卫', '', '{}',"
+                " strftime('%Y-%m-%dT%H:%M:%fZ','now'), 0)",
+                (uid, wid, eid))
+            await db.execute(
+                "INSERT INTO novel_tasks (task_id, novel_id, evolution_id, status,"
+                " created_at) VALUES ('task_guard', 'novel_guard', ?, 'processing',"
+                " strftime('%Y-%m-%dT%H:%M:%fZ','now'))", (eid,))
+            await db.commit()
+
+        asyncio.run(_seed_processing())
+
+        res = client.post(
+            f"/api/novels/generate?user_id={uid}&world_id={wid}&evolution_id={eid}")
+        assert res.status_code == 409
+        assert "进行中" in res.json()["detail"]
+
+        async def _counts():
+            db = await get_db()
+            tasks = await (await db.execute(
+                "SELECT COUNT(*) AS c FROM novel_tasks WHERE evolution_id = ?", (eid,))).fetchone()
+            return tasks["c"]
+
+        assert asyncio.run(_counts()) == 1  # 未新建行
+
     def test_generate_bridge_unavailable_503_no_orphan_rows(self, client, monkeypatch):
         """stub dispatcher 抛 BridgeUnavailable → 503，且预建 novel/task 行被回收（无孤儿）。"""
         import asyncio
