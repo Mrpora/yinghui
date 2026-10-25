@@ -74,6 +74,12 @@ class Config:
         # ── 安全 ──
         self.ALERT_EMAIL: str = os.getenv("ALERT_EMAIL", "")
 
+        # ── CORS ──
+        # 允许跨域的来源（逗号分隔）；默认空=后端回落 "*"（开放所有来源，维持
+        # 本地开发与 docker nginx 同源代理的现状兼容）。公网/跨域部署应显式
+        # 收窄，如 CORS_ORIGINS=https://yinghui.example.com（debt-wave4a F2）
+        self.CORS_ORIGINS: list[str] = _list_env("CORS_ORIGINS", [])
+
         # ── SQLite ──
         _sqlite_raw = os.getenv("SQLITE_PATH", "data/app.db")
         self.SQLITE_PATH: str = str(_project_root / _sqlite_raw)

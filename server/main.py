@@ -9,6 +9,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from server.config import config
 from server.logging_config import setup_logging
 from server.storage.sqlite_client import init_db
 from server.prompt_loader import preload_all
@@ -37,7 +38,9 @@ app = FastAPI(title="萦回 Demo API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    # CORS_ORIGINS 未配置（默认空）时回落 "*"：维持本地开发与 docker nginx
+    # 同源代理的现状兼容；公网/跨域部署应显式设置以收窄来源（debt-wave4a F2）
+    allow_origins=config.CORS_ORIGINS or ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

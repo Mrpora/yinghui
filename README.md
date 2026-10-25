@@ -213,7 +213,7 @@ yinghui/
 │       ├── api/              # 后端 API 调用层 + SSE 客户端
 │       ├── types/            # TypeScript 类型定义
 │       └── router/           # Vue Router 路由配置
-├── scripts/                  # Token 成本模型 + 字体生成
+├── scripts/                  # 字体混淆生成脚本（generate_obfuscated_font.py）
 ├── data/                     # SQLite 数据库 + 工作目录
 ├── models/                   # 本地嵌入模型
 ├── docs/                     # Demo 视频与素材
@@ -266,6 +266,15 @@ yinghui/
 | `NOVEL_CHAPTER_MIN_CHARS` | 每章最少字数 | `3000` |
 | `NOVEL_CHAPTER_MAX_CHARS` | 每章最多字数 | `5000` |
 | `NOVEL_WORK_DIR_BASE` | 任务工作目录 | `data/work` |
+
+</details>
+
+<details>
+<summary><b>服务器（CORS）</b></summary>
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `CORS_ORIGINS` | 允许跨域的来源列表（逗号分隔），如 `https://yinghui.example.com,https://b.example.com`。**默认空=开放所有来源（`*`）**，仅为兼容本地开发与 docker nginx 同源代理；公网部署务必显式设置以收窄跨域暴露面 | （空=`*`） |
 
 </details>
 

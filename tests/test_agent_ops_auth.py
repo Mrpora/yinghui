@@ -81,6 +81,31 @@ def test_token_set_wrong_header_401(client, seed_novel, set_agent_token):
     assert "X-Agent-Token" in res.json()["detail"]
 
 
+def test_wrong_token_via_constant_time_compare(client, seed_novel, set_agent_token,
+                                               monkeypatch):
+    """错 token 仍 401，且失配判定走 secrets.compare_digest（W4a F1）。
+
+    行为与旧 `!=` 完全一致（401），此处以 spy 锁定实现路径：鉴权必须经过
+    恒时比较，防止回归为可计时侧信道的直接字符串比较。
+    """
+    import secrets as _secrets
+
+    import server.routers.agent_ops as agent_ops_mod
+
+    calls: list[tuple[str, str]] = []
+    _real_compare = _secrets.compare_digest
+
+    def _spy(a: str, b: str) -> bool:
+        calls.append((a, b))
+        return _real_compare(a, b)
+
+    monkeypatch.setattr(agent_ops_mod.secrets, "compare_digest", _spy)
+    res = client.get(_user_facts_url(), headers={"X-Agent-Token": "wrong-token"})
+    assert res.status_code == 401
+    assert "X-Agent-Token" in res.json()["detail"]
+    assert calls == [("wrong-token", "test-shared-token")]
+
+
 def test_token_set_correct_header_200(client, seed_novel, set_agent_token):
     res = client.get(_user_facts_url(), headers={"X-Agent-Token": "test-shared-token"})
     assert res.status_code == 200

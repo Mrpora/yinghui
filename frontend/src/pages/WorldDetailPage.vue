@@ -32,7 +32,7 @@ const worldHistory = ref('')
 const rulesText = ref('')
 const initialEventContent = ref('')
 const initialEventTime = ref('')
-const characters = ref<CharacterConfig[]>([])
+const characters = ref<CharacterCard[]>([])
 const attitudesTexts = ref<string[]>([])
 
 function emptyCharacter(): CharacterConfig {
@@ -42,12 +42,21 @@ function emptyCharacter(): CharacterConfig {
   }
 }
 
+// 卡片级稳定 id：创建时生成、存于本地数组元素上，供 v-for :key 使用；
+// 删除中间卡片时其余卡片不因索引错位而错误复用 DOM/组件状态（W4a F5）。
+// _key 仅用于前端 diff，出站载荷（handleSave 逐字段构造）天然不含该字段。
+type CharacterCard = CharacterConfig & { _key: number }
+let _keySeq = 0
+function withKey(c: CharacterConfig): CharacterCard {
+  return { ...c, _key: ++_keySeq }
+}
+
 const MIN_CHARACTERS = 3
 const MAX_CHARACTERS = 10
 
 function addCharacter() {
   if (characters.value.length >= MAX_CHARACTERS) return
-  characters.value.push(emptyCharacter())
+  characters.value.push(withKey(emptyCharacter()))
   attitudesTexts.value.push('')
 }
 
@@ -84,7 +93,7 @@ function loadFromDetail(detail: Record<string, unknown>) {
   initialEventContent.value = ie.content || ''
   initialEventTime.value = ie.time || ''
   const chs = detail.characters as Record<string, unknown>[] || []
-  characters.value = chs.map((ch) => ({
+  characters.value = chs.map((ch) => withKey({
     ...emptyCharacter(),
     ...ch,
   }))
@@ -250,8 +259,8 @@ async function startEvolution() {
           <h2 class="text-sm text-smoke tracking-widest mb-3 border-b border-border-light pb-1">角色</h2>
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div
-              v-for="(ch, i) in characters"
-              :key="i"
+              v-for="ch in characters"
+              :key="ch._key"
               class="bg-white rounded-xl border border-border-light p-4"
             >
               <h3 class="font-bold text-ink mb-1">{{ ch.name || '(未命名)' }}</h3>
@@ -341,7 +350,7 @@ async function startEvolution() {
           </div>
 
           <div class="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            <div v-for="(ch, i) in characters" :key="i" class="bg-white rounded-xl border border-border-light p-5 space-y-3">
+            <div v-for="(ch, i) in characters" :key="ch._key" class="bg-white rounded-xl border border-border-light p-5 space-y-3">
               <p class="text-xs text-old-gold tracking-widest flex items-center justify-between">
                 <span>角色 {{ i + 1 }}</span>
                 <button

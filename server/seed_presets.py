@@ -187,12 +187,20 @@ def _insert_world(conn, world_id, user_id, name, description, rules, initial_eve
     )
 
 
+# 与 server/storage/sqlite_client.py 的 _CHARACTER_PALETTE / _pick_accent_color
+# 保持同步：调色板与选择算法（名字序数和哈希取色 + 线性探测避撞）在此刻意重复，
+# 因 seed_presets 为 stdlib-only 独立脚本（无外部包依赖隔离），不得 import
+# 服务端模块。同步锁定见 tests/test_palette_sync.py（W4a F4）。
 _PALETTE = ["#7B9EFF", "#4ECDC4", "#FF6B5B", "#F5C842", "#B8835A", "#7B9A8E",
             "#E2805C", "#9B8E7E", "#C44B3A", "#8E7CC3", "#5F9EA0", "#D4A5A5"]
 
 
 def _accent_color(name: str, used: set[str]) -> str:
-    """根据角色名确定性生成主题色，同世界内线性探测避免冲突。"""
+    """根据角色名确定性生成主题色，同世界内线性探测避免冲突。
+
+    与 server/storage/sqlite_client.py 的 _pick_accent_color 保持同步：
+    算法刻意重复（见上方 _PALETTE 处注释）。
+    """
     h = sum(ord(c) for c in name)
     idx = h % len(_PALETTE)
     offset = 0

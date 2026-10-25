@@ -71,6 +71,36 @@ class TestListEnv:
         assert _list_env("TEST_LIST_KEY", []) == ["a", "b"]
 
 
+class TestCorsOrigins:
+    """CORS_ORIGINS 解析（debt-wave4a F2）：默认空=后端维持 "*"，逗号分隔多来源。"""
+
+    def _reload_config(self):
+        from importlib import reload
+        import server.config
+        reload(server.config)
+        return server.config.Config()
+
+    def test_default_empty_when_not_set(self, monkeypatch):
+        """未设置 → 空列表（main.py 回落 ["*"]，兼容本地与 docker nginx 同源代理）。"""
+        monkeypatch.delenv("CORS_ORIGINS", raising=False)
+        assert self._reload_config().CORS_ORIGINS == []
+
+    def test_default_empty_when_blank_string(self, monkeypatch):
+        monkeypatch.setenv("CORS_ORIGINS", "  ")
+        assert self._reload_config().CORS_ORIGINS == []
+
+    def test_single_origin(self, monkeypatch):
+        monkeypatch.setenv("CORS_ORIGINS", "https://yinghui.example.com")
+        assert self._reload_config().CORS_ORIGINS == ["https://yinghui.example.com"]
+
+    def test_multiple_origins_comma_separated(self, monkeypatch):
+        monkeypatch.setenv(
+            "CORS_ORIGINS",
+            "https://a.example.com, https://b.example.com,,http://localhost:5173")
+        assert self._reload_config().CORS_ORIGINS == [
+            "https://a.example.com", "https://b.example.com", "http://localhost:5173"]
+
+
 class TestConfigDefaults:
     """验证 Config 对象的默认值与 env 覆盖。"""
 

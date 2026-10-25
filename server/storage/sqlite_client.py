@@ -18,7 +18,11 @@ def now_ms() -> int:
     return int(datetime.now(timezone.utc).timestamp() * 1000)
 
 
-# 角色强调色调色板——上限 10 人需 ≥10 色，第 10-12 色为本次扩充
+# 角色强调色调色板——上限 10 人需 ≥10 色，第 10-12 色为本次扩充。
+# 与 server/seed_presets.py 的 _PALETTE / _accent_color 保持同步：调色板与
+# 选择算法（名字序数和哈希取色 + 线性探测避撞）在此刻意重复，因 seed_presets
+# 为 stdlib-only 独立脚本，不得 import 本模块。同步锁定见
+# tests/test_palette_sync.py（W4a F4）。
 _CHARACTER_PALETTE = [
     "#7B9EFF", "#4ECDC4", "#FF6B5B", "#F5C842", "#B8835A", "#7B9A8E",
     "#E2805C", "#9B8E7E", "#C44B3A", "#8E7CC3", "#5F9EA0", "#D4A5A5",
@@ -26,7 +30,11 @@ _CHARACTER_PALETTE = [
 
 
 def _pick_accent_color(name: str, assigned: set[str]) -> str:
-    """按角色名哈希取色，撞色时向后探测第一个未用色。"""
+    """按角色名哈希取色，撞色时向后探测第一个未用色。
+
+    与 server/seed_presets.py 的 _accent_color 保持同步：
+    算法刻意重复（见上方 _CHARACTER_PALETTE 处注释）。
+    """
     h = sum(ord(c) for c in name)
     idx = h % len(_CHARACTER_PALETTE)
     offset = 0

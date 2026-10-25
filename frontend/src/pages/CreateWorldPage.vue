@@ -37,8 +37,20 @@ function emptyCharacter(): CharacterConfig {
   }
 }
 
-const characters = ref<CharacterConfig[]>(
-  Array.from({ length: MIN_CHARACTERS }, () => emptyCharacter()),
+// 卡片级稳定 id：创建时生成、存于本地数组元素上，供 v-for :key 使用；
+// 删除中间卡片时其余卡片不因索引错位而错误复用 DOM/组件状态（W4a F5）。
+// _key 仅用于前端 diff，出站载荷（AI 补全/创建）经 toConfig 剥离。
+type CharacterCard = CharacterConfig & { _key: number }
+let _keySeq = 0
+function withKey(c: CharacterConfig): CharacterCard {
+  return { ...c, _key: ++_keySeq }
+}
+function toConfig({ _key, ...cfg }: CharacterCard): CharacterConfig {
+  return cfg
+}
+
+const characters = ref<CharacterCard[]>(
+  Array.from({ length: MIN_CHARACTERS }, () => withKey(emptyCharacter())),
 )
 
 // ── 态度文本 ↔ Record 互转 ──
@@ -82,7 +94,7 @@ const completeError = ref('')
 
 function addCharacter() {
   if (characters.value.length >= MAX_CHARACTERS) return
-  characters.value.push(emptyCharacter())
+  characters.value.push(withKey(emptyCharacter()))
   attitudesTexts.value.push('')
 }
 
@@ -99,7 +111,7 @@ async function aiComplete() {
     const res = await completeWorldConfig({
       world_name: name.value,
       world_description: description.value,
-      characters: characters.value.filter(c => c.name.trim()),
+      characters: characters.value.filter(c => c.name.trim()).map(toConfig),
     })
     if (!res.world_history && !res.rules?.length && !res.characters?.length) throw new Error('AI 返回数据为空，请重试')
 
@@ -110,10 +122,10 @@ async function aiComplete() {
 
     const chs = res.characters || []
     const incoming = chs.slice(0, MAX_CHARACTERS)
-    characters.value = incoming.map((ch) => ({ ...emptyCharacter(), ...ch }))
+    characters.value = incoming.map((ch) => withKey({ ...emptyCharacter(), ...ch }))
     attitudesTexts.value = incoming.map((ch) => attitudesToText(ch.attitudes || {}))
     while (characters.value.length < MIN_CHARACTERS) {
-      characters.value.push(emptyCharacter())
+      characters.value.push(withKey(emptyCharacter()))
       attitudesTexts.value.push('')
     }
   } catch (e: unknown) {
@@ -181,7 +193,7 @@ async function handleCreate() {
         .map((ch, i) => ({ ch, i }))
         .filter(({ ch }) => ch.name.trim())
         .map(({ ch, i }) => ({
-          ...ch,
+          ...toConfig(ch),
           attitudes: textToAttitudes(attitudesTexts.value[i] || ''),
         })),
     })
@@ -324,7 +336,7 @@ async function handleCreate() {
         <div class="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           <div
             v-for="(ch, i) in characters"
-            :key="i"
+            :key="ch._key"
             class="bg-white rounded-xl border border-border-light p-5 space-y-3"
           >
             <p class="text-xs text-old-gold tracking-widest flex items-center justify-between">

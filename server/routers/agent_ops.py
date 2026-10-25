@@ -5,13 +5,15 @@
 
 仅回环使用；可选共享 token 鉴权（env ``AGENT_TOKEN``，默认空=开放，零配置启动与
 selftest 不变；非空时全部端点要求请求头 ``X-Agent-Token`` 匹配，失配 401——
-router 级 dependency 一处声明全路由生效，debt-wave3 W1）。逐端点薄壳：meta 级
+router 级 dependency 一处声明全路由生效，debt-wave3 W1；失配判定用
+``secrets.compare_digest`` 恒时比较，debt-wave4a F1）。逐端点薄壳：meta 级
 存在性校验与业务逻辑全部在 agent_ops_service（依赖经 Depends 显式注入，服务层
 无模块级单例）。
 SSE 词汇冻结：演化 round_start/timeline_event/branches/session_paused/
 round_end/session_ended/relationships；聊天 thinking/retrieving/memorizing/
 token/done/error。
 """
+import secrets
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -27,11 +29,14 @@ async def require_agent_token(x_agent_token: str | None = Header(default=None)) 
     """AGENT_TOKEN 非空时校验 ``X-Agent-Token`` 请求头（横切，不改任何端点语义）。
 
     预期值每次请求从 config 读取（测试可 monkeypatch）；默认空=直接放行。
+    失配判定用 ``secrets.compare_digest``（恒时比较，debt-wave4a F1，防计时
+    侧信道）；两侧均 str——缺失头按空串参与比较，空/None 恒不匹配非空预期值。
     """
     expected = config.AGENT_TOKEN
     if not expected:
         return
-    if x_agent_token != expected:
+    provided = x_agent_token or ""
+    if not secrets.compare_digest(provided, expected):
         raise HTTPException(
             status_code=401,
             detail="agent 访问未授权：请设置请求头 X-Agent-Token 为 yinghui 侧 "
