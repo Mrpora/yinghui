@@ -549,6 +549,47 @@ async def get_latest_novel_task_status(novel_id: str) -> str | None:
     return row["status"] if row else None
 
 
+async def get_latest_failed_task_by_evolution(evolution_id: str) -> dict | None:
+    """断点续写：取某演化记录最新的 failed 任务（排除已软删除的小说；无则 None）。
+
+    只查任务行；章节目录是否留存由调用方（novels generate 路由）核验后决定复用。
+    """
+    conn = await get_db()
+    cursor = await conn.execute(
+        "SELECT nt.* FROM novel_tasks nt "
+        "JOIN novels n ON n.novel_id = nt.novel_id AND n.is_deleted = 0 "
+        "WHERE nt.evolution_id = ? AND nt.status = 'failed' "
+        "ORDER BY nt.created_at DESC LIMIT 1",
+        (evolution_id,),
+    )
+    row = await cursor.fetchone()
+    return dict(row) if row else None
+
+
+async def reset_novel_task_for_retry(task_id: str) -> None:
+    """断点续写：失败任务行重置为 processing（result/error/completed_at 清空）。"""
+    conn = await get_db()
+    await conn.execute(
+        "UPDATE novel_tasks SET status = 'processing', result = NULL, error = NULL, "
+        "completed_at = NULL WHERE task_id = ?",
+        (task_id,),
+    )
+    await conn.commit()
+
+
+async def restore_novel_task(task_id: str, status: str, result: str | None,
+                             error: str | None, completed_at: int | None) -> None:
+    """断点续写回滚：复用任务的触发失败时按快照恢复任务行原值
+    （不删行——章节文件仍留存，可再次重试续写）。"""
+    conn = await get_db()
+    await conn.execute(
+        "UPDATE novel_tasks SET status = ?, result = ?, error = ?, completed_at = ? "
+        "WHERE task_id = ?",
+        (status, result, error, completed_at, task_id),
+    )
+    await conn.commit()
+
+
 async def get_processing_task_by_evolution(evolution_id: str) -> dict | None:
     """获取某个演化记录正在处理中的小说任务（排除已软删除的小说）。"""
     conn = await get_db()

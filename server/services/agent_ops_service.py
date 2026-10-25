@@ -694,6 +694,12 @@ def _task_work_dir(task_id: str) -> Path:
     return base / task_id
 
 
+def task_has_chapters(task_id: str) -> bool:
+    """断点续写判定：任务 chapters/ 目录存在且至少留存一个章节文件（ch_*.md）。"""
+    chapters_dir = _task_work_dir(task_id) / "chapters"
+    return chapters_dir.is_dir() and any(chapters_dir.glob("ch_*.md"))
+
+
 async def save_chapter(db, task_id: str, index: int, title: str, content: str) -> dict:
     """写章节文件 chapters/ch_{index}.md；title 在正文无标题时补 `# {title}`。"""
     await _require_task(db, task_id)

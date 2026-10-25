@@ -4,7 +4,8 @@
 """小说路由——异步生成 + 任务轮询 + SSE 进展 + 列表/详情 + 角色导入。
 
 生成与角色提取的 LLM 编排已外移至 yinghui-dsh-plug bridge：
-/generate 预建 novel/task 行后 fire-and-forget 触发；
+/generate 预建 novel/task 行后 fire-and-forget 触发（失败任务可断点续写——
+复用原 task_id/novel_id，W4b）；
 /import-characters 同步代理 bridge oneshot 提取，落库仍在本路由。
 """
 import asyncio
@@ -37,8 +38,18 @@ async def start_novel_generation(
     world_id: str = Query(...),
     evolution_id: str = Query(...),
 ):
-    """预建 novel/task 行后触发桥接生成（fire-and-forget），立即返回 task_id。"""
-    from server.storage.sqlite_client import get_world, get_world_characters
+    """预建 novel/task 行后触发桥接生成（fire-and-forget），立即返回 task_id。
+
+    断点续写（W4b）：同演化最新 failed 任务且章节目录留存（ch_*.md 非空）→
+    复用原 task_id/novel_id 并重置任务行续写（响应模型不变，前端零感知）；
+    未命中 → 预建新行（现行为不变）。
+    """
+    from server.services.agent_ops_service import task_has_chapters
+    from server.storage.sqlite_client import (
+        get_world, get_world_characters,
+        get_latest_failed_task_by_evolution,
+        reset_novel_task_for_retry, restore_novel_task,
+    )
 
     world, chars = await asyncio.gather(
         get_world(world_id),
@@ -53,8 +64,6 @@ async def start_novel_generation(
     )
     evo = await cursor.fetchone()
 
-    task_id = f"task_{uuid.uuid4().hex[:8]}"
-
     world_config = {
         "name": world["name"],
         "description": world["description"],
@@ -62,9 +71,26 @@ async def start_novel_generation(
         "rules": world.get("rules", "[]"),
     }
 
-    # 预创建 novel 记录与任务行（bridge 按 task_id 经 /api/agent/* 回写）
-    novel_id = await create_novel(user_id, world_id, evolution_id, world["name"], "", world_config)
-    await create_novel_task(task_id, novel_id, evolution_id)
+    # 断点续写判定：同演化最新 failed 任务 + 章节目录留存 → 复用；否则新建
+    prev = await get_latest_failed_task_by_evolution(evolution_id)
+    reused = prev is not None and task_has_chapters(prev["task_id"])
+    if reused:
+        task_id = prev["task_id"]
+        novel_id = prev["novel_id"]
+        logger.info("断点续写：命中可复用失败任务 task_id=%s novel_id=%s "
+                    "evolution_id=%s（章节目录留存），重置任务行续写",
+                    task_id, novel_id, evolution_id)
+        await reset_novel_task_for_retry(task_id)
+    else:
+        if prev is not None:
+            logger.info("断点续写未命中：失败任务 task_id=%s 章节目录不存在或为空，"
+                        "预建新行从头生成", prev["task_id"])
+        task_id = f"task_{uuid.uuid4().hex[:8]}"
+
+        # 预创建 novel 记录与任务行（bridge 按 task_id 经 /api/agent/* 回写）
+        novel_id = await create_novel(user_id, world_id, evolution_id, world["name"], "",
+                                      world_config)
+        await create_novel_task(task_id, novel_id, evolution_id)
 
     try:
         await dispatch_or_503("novels/generate", {
@@ -76,13 +102,20 @@ async def start_novel_generation(
         })
     except Exception:
         # 触发失败（含 bridge 非 2xx / 非法 JSON 被包装为 BridgeUnavailable → 503）：
-        # 回收本请求预建的行，保持「不可达 = 什么都没发生」
-        await db.execute("DELETE FROM novel_tasks WHERE task_id = ?", (task_id,))
-        await db.execute("DELETE FROM novels WHERE novel_id = ?", (novel_id,))
-        await db.commit()
+        # 新建路径回收预建的行；复用路径恢复失败任务行原值（不删行，
+        # 章节 文件仍留存可再次重试续写），均保持「不可达 = 什么都没发生」
+        if reused:
+            await restore_novel_task(
+                task_id, prev["status"], prev["result"], prev["error"],
+                prev["completed_at"])
+        else:
+            await db.execute("DELETE FROM novel_tasks WHERE task_id = ?", (task_id,))
+            await db.execute("DELETE FROM novels WHERE novel_id = ?", (novel_id,))
+            await db.commit()
         raise
 
-    logger.info("小说生成任务已触发 task_id=%s world_id=%s", task_id, world_id)
+    logger.info("小说生成任务已触发 task_id=%s world_id=%s reuse=%s",
+                task_id, world_id, reused)
     return {"task_id": task_id, "novel_id": novel_id, "status": "processing"}
 
 
